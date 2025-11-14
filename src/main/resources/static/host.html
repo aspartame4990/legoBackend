@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>谁是卧底 · 房主面板</title>
+    <link rel="stylesheet" href="/css/undercover.css">
+    <script defer src="/js/host.js"></script>
+</head>
+<body>
+<div class="page">
+    <div class="card stack">
+        <div>
+            <h1>谁是卧底 · 房主</h1>
+            <p class="hint">创建唯一一场游戏，系统会负责倒计时、词语分配和投票阶段。</p>
+        </div>
+        <form id="createForm">
+            <div class="field">
+                <label for="civilianWord">平民词语</label>
+                <input id="civilianWord" name="civilianWord" placeholder="例：老虎" required>
+            </div>
+            <div class="field">
+                <label for="undercoverWord">卧底词语</label>
+                <input id="undercoverWord" name="undercoverWord" placeholder="例：狮子" required>
+            </div>
+            <button type="submit">创建游戏</button>
+        </form>
+        <div id="formError" class="error" hidden></div>
+    </div>
+
+    <div id="gamePanel" class="stack" hidden>
+        <div class="card stack">
+            <div>
+                <span class="label">当前状态</span>
+                <div class="status-badge" id="statusBadge">等待创建</div>
+            </div>
+            <div>
+                <span class="label">倒计时（自动进入投票）</span>
+                <div class="countdown-display" id="countdownText">--</div>
+                <p class="hint">倒计时 2 分 30 秒，最后 30 秒所有手环会蜂鸣提醒。</p>
+            </div>
+            <div class="actions">
+                <button id="startBtn" type="button">开始游戏</button>
+            </div>
+        </div>
+
+        <div class="card stack">
+            <h2>词语配置</h2>
+            <div class="share-box">
+                <div class="share-item">
+                    <span class="label">平民词语</span>
+                    <strong id="civilianWordText">-</strong>
+                </div>
+                <div class="share-item">
+                    <span class="label">卧底词语</span>
+                    <strong id="undercoverWordText">-</strong>
+                </div>
+            </div>
+        </div>
+
+        <div class="card stack">
+            <h2>参与者（<span id="playerCount">0</span>）</h2>
+            <div class="hint">玩家加入顺序即下方列表顺序</div>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>昵称</th>
+                        <th>词语</th>
+                        <th>投票</th>
+                        <th>身份</th>
+                    </tr>
+                    </thead>
+                    <tbody id="playersTable">
+                    <tr>
+                        <td colspan="4" class="empty">暂无玩家</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="card stack">
+            <h2>投票统计</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>玩家</th>
+                        <th>票数</th>
+                    </tr>
+                    </thead>
+                    <tbody id="voteTable">
+                    <tr>
+                        <td colspan="2" class="empty">暂无投票</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

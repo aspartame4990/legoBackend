@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>谁是卧底 · 参与者</title>
+    <link rel="stylesheet" href="/css/undercover.css">
+    <script defer src="/js/participant.js"></script>
+</head>
+<body>
+<div class="page">
+    <div class="card stack" id="joinCard">
+        <div>
+            <h1>加入游戏</h1>
+            <p class="hint">只需输入昵称即可加入当前正在进行的唯一一场游戏。</p>
+        </div>
+        <form id="joinForm">
+            <div class="field">
+                <label for="playerName">我的昵称</label>
+                <input id="playerName" required placeholder="例：小明">
+            </div>
+            <button type="submit">加入游戏</button>
+        </form>
+        <div id="joinError" class="error" hidden></div>
+    </div>
+
+    <div id="playerPanel" class="card stack" hidden>
+        <div class="share-box">
+            <div class="share-item">
+                <span class="label">我的昵称</span>
+                <strong id="panelName">-</strong>
+            </div>
+            <div class="share-item">
+                <span class="label">当前阶段</span>
+                <strong id="panelStatus">等待</strong>
+            </div>
+        </div>
+        <div class="stack">
+            <span class="label">倒计时（自动进入投票）</span>
+            <div class="countdown-display" id="participantCountdown">--</div>
+            <p class="hint">描述阶段仅 2 分 30 秒，最后 30 秒手环会蜂鸣提醒。</p>
+        </div>
+        <div class="stack">
+            <h2>词语一览</h2>
+            <div class="share-box">
+                <div class="share-item">
+                    <span class="label">词语 1（3短1长震动）</span>
+                    <strong id="wordOneText">-</strong>
+                </div>
+                <div class="share-item">
+                    <span class="label">词语 2（2短2长震动）</span>
+                    <strong id="wordTwoText">-</strong>
+                </div>
+            </div>
+        </div>
+        <div class="stack">
+            <h2>投票</h2>
+            <div id="voteSection">
+                <div class="hint">等待房主开启投票</div>
+            </div>
+        </div>
+        <div class="stack">
+            <h2>投票统计</h2>
+            <div class="table-wrapper">
+                <table>
+                    <thead>
+                    <tr>
+                        <th>玩家</th>
+                        <th>票数</th>
+                    </tr>
+                    </thead>
+                    <tbody id="participantVoteTable">
+                    <tr>
+                        <td colspan="2" class="empty">暂无投票</td>
+                    </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+        <div class="stack">
+            <h2>玩家列表</h2>
+            <ul id="playersList" class="hint"></ul>
+        </div>
+    </div>
+</div>
+</body>
+</html>
