@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>多模态工具箱 · 参与者</title>
+    <link rel="stylesheet" href="/css/undercover.css">
+    <script defer src="/js/player.js"></script>
+</head>
+<body>
+<div class="page">
+    <div class="card stack" id="joinCard">
+        <div>
+            <h1>加入游戏</h1>
+            <p class="hint">输入昵称加入唯一一场游戏，保持页面常开以便接收状态。</p>
+        </div>
+        <form id="joinForm">
+            <div class="field">
+                <label for="playerName">我的昵称</label>
+                <input id="playerName" required placeholder="例：小明">
+            </div>
+            <button type="submit">加入游戏</button>
+        </form>
+        <div id="joinError" class="error" hidden></div>
+    </div>
+
+    <div id="playerPanel" class="stack" hidden>
+        <div class="card stack">
+            <div class="share-box">
+                <div class="share-item">
+                    <span class="label">我的昵称</span>
+                    <strong id="panelName">-</strong>
+                </div>
+                <div class="share-item">
+                    <span class="label">当前阶段</span>
+                    <strong id="panelStatus">等待</strong>
+                </div>
+            </div>
+            <div class="stack">
+                <span class="label">倒计时（自动进入投票）</span>
+                <div class="countdown-display" id="participantCountdown">--</div>
+                <p class="hint">描述阶段 2 分 30 秒，最后 30 秒手环会振动提醒。</p>
+            </div>
+            <div class="stack">
+                <h2>词语一览</h2>
+                <div class="share-box">
+                    <div class="share-item">
+                        <span class="label">主题 A（S-S-S-L）</span>
+                        <strong id="wordOneText">-</strong>
+                    </div>
+                    <div class="share-item">
+                        <span class="label">主题 B（S-S-L-L）</span>
+                        <strong id="wordTwoText">-</strong>
+                    </div>
+                </div>
+            </div>
+            <div class="stack">
+                <h2>投票</h2>
+                <div id="voteSection">
+                    <div class="hint">等待房主开启投票</div>
+                </div>
+            </div>
+            <div class="stack">
+                <h2>投票统计</h2>
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                        <tr>
+                            <th>玩家</th>
+                            <th>票数</th>
+                        </tr>
+                        </thead>
+                        <tbody id="participantVoteTable">
+                        <tr>
+                            <td colspan="2" class="empty">暂无投票</td>
+                        </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="stack">
+                <h2>玩家列表</h2>
+                <ul id="playersList" class="hint"></ul>
+            </div>
+        </div>
+
+        <div class="card stack">
+            <h2>游戏二 · LegoSense</h2>
+            <div class="share-box">
+                <div class="share-item">
+                    <span class="label">状态</span>
+                    <strong id="legoSenseStatus">未开始</strong>
+                </div>
+                <div class="share-item">
+                    <span class="label">我的分组</span>
+                    <strong id="legoSenseGroup">-</strong>
+                </div>
+            </div>
+            <div class="stack">
+                <label for="emotionInput" class="label">输入一个情绪词</label>
+                <div class="row gap">
+                    <input id="emotionInput" placeholder="例：calm / excited">
+                    <button type="button" id="submitEmotionBtn">提交</button>
+                </div>
+                <div class="hint" id="emotionHint">提交后房主会把你分入同色小组。</div>
+            </div>
+            <div class="stack">
+                <span class="label">我的灯光</span>
+                <div class="led-chip" id="legoSenseColor">尚未下发</div>
+            </div>
+        </div>
+    </div>
+</div>
+</body>
+</html>

@@ -1,0 +1,12 @@
+{
+  "name": "lego-backend-ts",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild frontend/host.ts --bundle --outfile=static/js/host.js --minify && esbuild frontend/player.ts --bundle --outfile=static/js/player.js --minify",
+    "dev": "esbuild frontend/host.ts --bundle --outfile=static/js/host.js --watch & esbuild frontend/player.ts --bundle --outfile=static/js/player.js --watch"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0"
+  }
+}
