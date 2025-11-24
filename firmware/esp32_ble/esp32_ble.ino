@@ -33,7 +33,7 @@ class MyServerCallbacks: public BLEServerCallbacks {
 // 特征回调：处理数据写入
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      std::string value = pCharacteristic->getValue();
+      String value = pCharacteristic->getValue();
       if (value.length() > 0) {
         Serial.print("收到指令: ");
         for (int i = 0; i < value.length(); i++) {
