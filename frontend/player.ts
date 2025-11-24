@@ -79,6 +79,43 @@ const VIBE_PATTERN_B: VibeSample[] = [
     1, 1, 1, 1, 1, 1, 1, 0, 0, 0
 ];
 
+// --- Bluetooth Configuration ---
+const BLE_SERVICE_UUID = "4fafc201-1fb5-459e-8fcc-c5c9c331914b";
+const BLE_CHAR_UUID = "beb5483e-36e1-4688-b7f5-ea07361b26a8";
+
+let bleDevice: BluetoothDevice | null = null;
+let bleCharacteristic: BluetoothRemoteGATTCharacteristic | null = null;
+
+// Polyfill types
+interface BluetoothDevice extends EventTarget {
+    id: string;
+    name?: string;
+    gatt?: BluetoothRemoteGATTServer;
+}
+interface BluetoothRemoteGATTServer {
+    connected: boolean;
+    connect(): Promise<BluetoothRemoteGATTServer>;
+    getPrimaryService(service: string): Promise<BluetoothRemoteGATTService>;
+}
+interface BluetoothRemoteGATTService {
+    getCharacteristic(characteristic: string): Promise<BluetoothRemoteGATTCharacteristic>;
+}
+interface BluetoothRemoteGATTCharacteristic {
+    writeValue(value: BufferSource): Promise<void>;
+}
+
+// --- Random Name Generator ---
+const ADJECTIVES = ["Happy", "Lucky", "Sunny", "Clever", "Brave", "Calm", "Swift", "Cool", "Neon", "Cyber"];
+const NOUNS = ["Lion", "Tiger", "Bear", "Eagle", "Panda", "Wolf", "Fox", "Hawk", "Bot", "Pilot"];
+
+function generateRandomName() {
+    const adj = ADJECTIVES[Math.floor(Math.random() * ADJECTIVES.length)];
+    const noun = NOUNS[Math.floor(Math.random() * NOUNS.length)];
+    const num = Math.floor(Math.random() * 100);
+    return `${adj}${noun}${num}`;
+}
+
+
 export function initPlayer() {
     // Event Listeners
     const joinForm = document.getElementById("joinForm") as HTMLFormElement | null;
@@ -97,8 +134,17 @@ export function initPlayer() {
         state.token = stored;
         fetchParticipantView();
         startPolling();
+    } else {
+        // Pre-fill random name
+        const nameInput = document.getElementById("playerName") as HTMLInputElement;
+        if (nameInput) nameInput.value = generateRandomName();
     }
+
+    // Bluetooth Listener
+    const connectBtn = document.getElementById("playerConnectBtn");
+    if (connectBtn) connectBtn.addEventListener("click", connectToBleDevice);
 }
+
 
 document.addEventListener("DOMContentLoaded", () => {
     initPlayer();
@@ -442,4 +488,79 @@ function formatSeconds(seconds: number) {
 function setJoinButtonDisabled(disabled: boolean) {
     const button = document.querySelector<HTMLButtonElement>("#joinForm button[type='submit']");
     if (button) button.disabled = disabled;
+}
+
+// --- Bluetooth Functions ---
+
+async function connectToBleDevice() {
+    try {
+        const nav = navigator as any;
+        if (!nav.bluetooth) {
+            alert("Web Bluetooth is not supported in this browser. Please use Chrome Android or Bluefy on iOS.");
+            return;
+        }
+
+        console.log("Requesting Bluetooth Device...");
+        const device = await nav.bluetooth.requestDevice({
+            filters: [{ name: "LegoSense_Band" }],
+            optionalServices: [BLE_SERVICE_UUID]
+        });
+
+        console.log("Connecting to GATT Server...");
+        const server = await device.gatt.connect();
+
+        console.log("Getting Service...");
+        const service = await server.getPrimaryService(BLE_SERVICE_UUID);
+
+        console.log("Getting Characteristic...");
+        bleCharacteristic = await service.getCharacteristic(BLE_CHAR_UUID);
+
+        bleDevice = device;
+        // alert("Connected to LegoSense Band!");
+
+        updateBleUI(true, device.name);
+
+        device.addEventListener('gattserverdisconnected', onDisconnected);
+
+    } catch (error) {
+        console.error("Argh! " + error);
+        alert("Failed to connect: " + error);
+    }
+}
+
+function onDisconnected(event: any) {
+    const device = event.target;
+    console.log(`Device ${device.name} is disconnected.`);
+    bleDevice = null;
+    bleCharacteristic = null;
+
+    updateBleUI(false);
+    alert("Bracelet disconnected.");
+}
+
+function updateBleUI(connected: boolean, deviceName?: string) {
+    const btn = document.getElementById("playerConnectBtn");
+    const status = document.getElementById("playerBraceletStatus");
+
+    if (connected) {
+        if (btn) {
+            btn.textContent = "Bracelet Connected";
+            btn.classList.remove("btn-outline");
+            btn.classList.add("btn-success");
+        }
+        if (status) {
+            status.textContent = `Connected to ${deviceName || "Device"}`;
+            status.style.color = "var(--success)";
+        }
+    } else {
+        if (btn) {
+            btn.textContent = "Connect Bracelet";
+            btn.classList.remove("btn-success");
+            btn.classList.add("btn-outline");
+        }
+        if (status) {
+            status.textContent = "No bracelet connected";
+            status.style.color = "";
+        }
+    }
 }
