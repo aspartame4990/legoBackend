@@ -660,7 +660,7 @@ async function connectToBleDevice() {
         bleCharacteristic = await service.getCharacteristic(BLE_CHAR_UUID);
 
         bleDevice = device;
-        alert("Connected to LegoSense Band!");
+        // alert("Connected to LegoSense Band!");
 
         // Update UI to show connected state
         const btn = document.getElementById("refreshDevicesBtn");
@@ -668,6 +668,17 @@ async function connectToBleDevice() {
             btn.textContent = "Device Connected";
             btn.classList.remove("btn-outline");
             btn.classList.add("btn-success");
+        }
+
+        // Update Host Bracelet Status Display
+        const statusEl = document.getElementById("connectedDeviceName");
+        if (statusEl) {
+            statusEl.textContent = `Connected: ${device.name || "Unknown Device"}`;
+            statusEl.style.color = "var(--success)";
+            if (statusEl.parentElement) {
+                statusEl.parentElement.style.borderStyle = "solid";
+                statusEl.parentElement.style.borderColor = "var(--success)";
+            }
         }
 
         device.addEventListener('gattserverdisconnected', onDisconnected);
@@ -690,6 +701,18 @@ function onDisconnected(event: any) {
         btn.classList.remove("btn-success");
         btn.classList.add("btn-outline");
     }
+
+    // Reset Host Bracelet Status Display
+    const statusEl = document.getElementById("connectedDeviceName");
+    if (statusEl) {
+        statusEl.textContent = "No Host Bracelet Connected";
+        statusEl.style.color = "var(--text-muted)";
+        if (statusEl.parentElement) {
+            statusEl.parentElement.style.borderStyle = "dashed";
+            statusEl.parentElement.style.borderColor = "var(--border)";
+        }
+    }
+
     alert("Bracelet disconnected.");
 }
 

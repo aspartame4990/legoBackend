@@ -33,13 +33,17 @@ class MyServerCallbacks: public BLEServerCallbacks {
 // 特征回调：处理数据写入
 class MyCallbacks: public BLECharacteristicCallbacks {
     void onWrite(BLECharacteristic *pCharacteristic) {
-      String value = pCharacteristic->getValue();
+      std::string value = pCharacteristic->getValue();
       if (value.length() > 0) {
-        Serial.print("收到指令: ");
-        for (int i = 0; i < value.length(); i++) {
-          Serial.print(value[i]);
+        // 根据用户需求，收到 A/B 时打印特定字符串
+        if (value == "A") {
+          Serial.println("test vibe A");
+        } else if (value == "B") {
+          Serial.println("test vibe B");
+        } else {
+          Serial.print("收到指令: ");
+          Serial.println(value.c_str());
         }
-        Serial.println();
         
         // 收到任何数据闪烁一下，表示通信成功
         digitalWrite(LED_PIN, LOW);
