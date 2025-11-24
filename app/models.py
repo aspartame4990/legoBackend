@@ -35,6 +35,8 @@ class Participant:
 class UndercoverGame:
     civilian_word: str
     undercover_word: str
+    civilian_image: Optional[str] = None
+    undercover_image: Optional[str] = None
     participants: Dict[str, Participant] = field(default_factory=dict)
     status: GameStatus = GameStatus.WAITING_FOR_PLAYERS
     undercover_participant_id: Optional[str] = None

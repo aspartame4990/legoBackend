@@ -27,6 +27,7 @@ from .schemas import (
     HostParticipantView,
 )
 from .state import state
+from .hardware import router as hardware_router
 
 app = FastAPI(title="Lego Backend (FastAPI)")
 
@@ -42,7 +43,9 @@ app.add_middleware(
 # ---- Game 1 APIs ----
 @app.post("/api/game", response_model=HostGameView)
 async def create_game(payload: CreateGameRequest):
-    game = await state.create_game(payload.civilianWord.strip(), payload.undercoverWord.strip())
+    c_word = payload.civilianWord.strip() if payload.civilianWord else None
+    u_word = payload.undercoverWord.strip() if payload.undercoverWord else None
+    game = await state.create_game(c_word, u_word)
     return to_host_view(game)
 
 
@@ -61,9 +64,17 @@ async def join_game(payload: JoinGameRequest):
 
 
 @app.post("/api/game/start", status_code=202)
-async def start_game():
+async def start_game(mockMode: bool = False):
     try:
-        await state.start_game()
+        await state.start_game(mock_mode=mockMode)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/game/switch-topic", status_code=202)
+async def switch_topic():
+    try:
+        await state.switch_topic()
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -93,9 +104,10 @@ async def participant_view(token: str):
 
 
 # ---- LegoSense APIs ----
-@app.post("/api/legosense/start", status_code=204)
+@app.post("/api/legosense/start", status_code=200)
 async def start_legosense():
     await state.set_lego_sense_started()
+    return {"status": "ok"}
 
 
 @app.get("/api/legosense/host", response_model=LegoSenseHostView)
@@ -153,10 +165,11 @@ async def legosense_player(token: str):
     )
 
 
-@app.post("/api/legosense/submit", status_code=204)
+@app.post("/api/legosense/submit", status_code=200)
 async def legosense_submit(payload: EmotionSubmitRequest):
     try:
         await state.submit_emotion(payload.participantToken, payload.emotion.strip())
+        return {"status": "ok"}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
@@ -193,15 +206,25 @@ def to_host_view(game) -> HostGameView:
         )
         for p in game.participants.values()
     ]
+    undercover_name = (
+        game.participants.get(game.undercover_participant_id).name
+        if game.undercover_participant_id and game.undercover_participant_id in game.participants
+        else None
+    )
     return HostGameView(
         civilianWord=game.civilian_word,
         undercoverWord=game.undercover_word,
+        civilianImage=game.civilian_image,
+        undercoverImage=game.undercover_image,
         status=game.status,
         countdownActive=countdown_active,
         secondsToVoting=seconds_to_voting,
+        warningTriggered=bool(getattr(game, "warning_triggered", False)),
         totalParticipants=len(game.participants),
         participants=participants,
         undercoverParticipantId=game.undercover_participant_id,
+        undercoverName=undercover_name,
+        winningTeam=game.winning_team,
         voteSummary=vote_summary,
     )
 
@@ -212,6 +235,11 @@ def to_participant_view(game, participant) -> ParticipantView:
     if countdown_active:
         seconds_to_voting = max(0, int((game.countdown_ends_at - now_utc()).total_seconds()))
     vote_summary = build_vote_summary(game)
+    undercover_name = (
+        game.participants.get(game.undercover_participant_id).name
+        if game.undercover_participant_id and game.undercover_participant_id in game.participants
+        else None
+    )
     return ParticipantView(
         participantId=participant.participant_id,
         name=participant.name,
@@ -219,14 +247,19 @@ def to_participant_view(game, participant) -> ParticipantView:
         word=participant.word,
         civilianWord=game.civilian_word,
         undercoverWord=game.undercover_word,
+        civilianImage=game.civilian_image,
+        undercoverImage=game.undercover_image,
         countdownActive=countdown_active,
         secondsToVoting=seconds_to_voting,
+        warningTriggered=bool(getattr(game, "warning_triggered", False)),
         canVote=game.status == GameStatus.VOTING and not participant.has_voted,
         hasVoted=participant.has_voted,
         participants=[
             ParticipantListItem(participantId=p.participant_id, name=p.name)
             for p in sorted(game.participants.values(), key=lambda p: p.name.lower())
         ],
+        undercoverName=undercover_name,
+        winningTeam=game.winning_team,
         voteSummary=vote_summary,
     )
 
@@ -247,3 +280,5 @@ def build_vote_summary(game) -> List[VoteSummaryItem]:
 
 # Serve static assets (built JS/CSS/HTML)
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
+
+app.include_router(hardware_router)

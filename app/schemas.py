@@ -9,8 +9,8 @@ from .models import GameStatus, LegoSenseStatus, Team
 
 
 class CreateGameRequest(BaseModel):
-    civilianWord: str = Field(..., min_length=1)
-    undercoverWord: str = Field(..., min_length=1)
+    civilianWord: Optional[str] = None
+    undercoverWord: Optional[str] = None
 
 
 class JoinGameRequest(BaseModel):
@@ -43,13 +43,19 @@ class HostParticipantView(BaseModel):
 
 class HostGameView(BaseModel):
     civilianWord: str
+    civilianWord: str
     undercoverWord: str
+    civilianImage: Optional[str] = None
+    undercoverImage: Optional[str] = None
     status: GameStatus
     countdownActive: bool
     secondsToVoting: int
+    warningTriggered: bool
     totalParticipants: int
     participants: List[HostParticipantView]
     undercoverParticipantId: Optional[str]
+    undercoverName: Optional[str]
+    winningTeam: Optional[Team]
     voteSummary: List[VoteSummaryItem]
 
 
@@ -59,12 +65,18 @@ class ParticipantView(BaseModel):
     status: GameStatus
     word: Optional[str]
     civilianWord: str
+    civilianWord: str
     undercoverWord: str
+    civilianImage: Optional[str] = None
+    undercoverImage: Optional[str] = None
     countdownActive: bool
     secondsToVoting: int
+    warningTriggered: bool
     canVote: bool
     hasVoted: bool
     participants: List[ParticipantListItem]
+    undercoverName: Optional[str]
+    winningTeam: Optional[Team]
     voteSummary: List[VoteSummaryItem]
 
 

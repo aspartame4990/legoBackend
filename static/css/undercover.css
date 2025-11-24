@@ -215,17 +215,17 @@ th, td {
     display: inline-block;
 }
 
-.actions button.secondary {
-    background: #fff;
-    color: var(--text);
-    border: 1px solid var(--border);
-}
-
 .countdown-display {
     font-size: 30px;
     font-weight: 700;
     letter-spacing: 1px;
     margin-top: 4px;
+    transition: color 0.2s ease, transform 0.2s ease;
+}
+
+.countdown-display.danger {
+    color: var(--danger);
+    transform: scale(1.04);
 }
 
 .hint {
@@ -253,6 +253,185 @@ th, td {
     display: flex;
     gap: 12px;
     flex-wrap: wrap;
+}
+
+/* --- Game1 vibration cards --- */
+
+.vibe-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.vibe-card {
+    position: relative;
+    overflow: hidden;
+    border-radius: 16px;
+    min-height: 180px;
+    background: #020617;
+    color: #e5e7eb;
+    box-shadow: 0 16px 40px rgba(15, 23, 42, 0.35);
+}
+
+.vibe-bg {
+    position: absolute;
+    inset: 0;
+    background-size: cover;
+    background-position: center;
+    filter: saturate(1.1) brightness(0.8);
+    opacity: 0.9;
+}
+
+.vibe-overlay {
+    position: relative;
+    z-index: 1;
+    padding: 16px 16px 14px;
+    background: linear-gradient(to top, rgba(15, 23, 42, 0.9), rgba(15, 23, 42, 0.3));
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    justify-content: flex-end;
+    gap: 8px;
+}
+
+.vibe-label {
+    font-size: 12px;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+}
+
+.vibe-title {
+    font-size: 18px;
+    font-weight: 600;
+}
+
+.vibe-wave {
+    width: 100%;
+    height: 32px;
+    display: block;
+}
+
+.phase-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s ease;
+    z-index: 40;
+}
+
+.phase-overlay.visible {
+    opacity: 1;
+    pointer-events: auto;
+}
+
+.phase-overlay-inner {
+    background: rgba(15, 23, 42, 0.9);
+    color: #e5e7eb;
+    padding: 24px 28px;
+    border-radius: 18px;
+    box-shadow: 0 20px 50px rgba(15, 23, 42, 0.8);
+    max-width: 420px;
+    text-align: center;
+}
+
+.phase-overlay-inner h2 {
+    margin: 0 0 8px;
+}
+
+.phase-overlay-inner p {
+    margin: 0;
+    font-size: 14px;
+    color: #cbd5f5;
+}
+
+.result-banner {
+    padding: 10px 14px;
+    border-radius: 999px;
+    font-size: 14px;
+    font-weight: 600;
+    margin-bottom: 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #e5e7eb;
+    color: #111827;
+}
+
+.result-banner[data-team="CIVILIANS"] {
+    background: #dcfce7;
+    color: #14532d;
+}
+
+.result-banner[data-team="UNDERCOVER"] {
+    background: #fee2e2;
+    color: #7f1d1d;
+}
+
+/* --- Top navigation --- */
+
+.top-nav {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.top-nav-title {
+    font-weight: 600;
+    font-size: 18px;
+}
+
+.top-nav-tabs {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: 999px;
+    background: #e5e7eb;
+}
+
+.top-nav-tab {
+    border-radius: 999px;
+    padding: 6px 14px;
+    font-size: 13px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #4b5563;
+}
+
+.top-nav-tab.active {
+    background: #fff;
+    color: #111827;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
+}
+
+.step-tabs {
+    display: inline-flex;
+    padding: 3px;
+    border-radius: 999px;
+    background: #e5e7eb;
+    gap: 4px;
+}
+
+.step-tab {
+    border-radius: 999px;
+    padding: 6px 12px;
+    font-size: 13px;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    color: #4b5563;
+}
+
+.step-tab.active {
+    background: #fff;
+    color: #111827;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.15);
 }
 
 @media (max-width: 640px) {

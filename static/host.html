@@ -1,157 +1,215 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="zh-CN">
 <head>
-    <meta charset="UTF-8">
-    <title>多模态工具箱 · 房主面板</title>
-    <link rel="stylesheet" href="/css/undercover.css">
-    <script defer src="/js/host.js"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Host Panel · Multimodal Toolbox</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <script type="module" crossorigin src="/assets/host-D5zHVBTt.js"></script>
+  <link rel="modulepreload" crossorigin href="/assets/new_design-DBfZw-qo.js">
+  <link rel="stylesheet" crossorigin href="/assets/new_design-AJ3g81Xx.css">
 </head>
 <body>
-<div class="page">
-    <div class="card stack">
-        <div>
-            <h1>游戏一 · 谁是卧底</h1>
-            <p class="hint">轻量后端（FastAPI）负责倒计时、震动模式分配和投票。</p>
-        </div>
-        <form id="createForm">
-            <div class="field">
-                <label for="civilianWord">平民词语</label>
-                <input id="civilianWord" name="civilianWord" placeholder="例：夏天" required>
-            </div>
-            <div class="field">
-                <label for="undercoverWord">卧底词语</label>
-                <input id="undercoverWord" name="undercoverWord" placeholder="例：冬天" required>
-            </div>
-            <button type="submit">创建游戏一</button>
-        </form>
-        <div id="formError" class="error" hidden></div>
-    </div>
+  <div id="app" class="page">
+    <!-- Header -->
+    <header class="row between center" style="margin-bottom: 2rem;">
+      <div class="row center">
+        <h1>Host Panel</h1>
+        <span class="badge badge-neutral" id="connectionStatus">System Ready</span>
+      </div>
+      <div class="nav-tabs" style="margin-bottom: 0;">
+        <button class="nav-tab active" data-view="game1">Undercover</button>
+        <button class="nav-tab" data-view="game2">LegoSense</button>
+      </div>
+    </header>
 
-    <div id="gamePanel" class="stack" hidden>
-        <div class="card stack">
-            <div class="row wrap">
-                <div>
-                    <span class="label">当前状态</span>
-                    <div class="status-badge" id="statusBadge">等待创建</div>
+    <!-- Game 1: Undercover -->
+    <main id="view-game1" class="stack fade-in">
+      
+      <!-- Phase Indicator -->
+      <div class="phase-indicator">
+        <div class="phase-step active" id="step-setup">
+          <div class="phase-dot"></div>
+          <span>Pre-game</span>
+        </div>
+        <div class="phase-step" id="step-play">
+          <div class="phase-dot"></div>
+          <span>In-game</span>
+        </div>
+        <div class="phase-step" id="step-wrap">
+          <div class="phase-dot"></div>
+          <span>Post-game</span>
+        </div>
+      </div>
+
+      <!-- Phase 1: Setup & Pre-game -->
+      <section id="game1-setup" class="stack">
+        <div class="row wrap gap-lg">
+          <!-- Left Col: Controls -->
+          <div class="stack" style="flex: 1; min-width: 300px;">
+            <div class="card stack">
+              <div class="row between center">
+                <h2>Round Setup</h2>
+                <span class="badge badge-neutral" id="playerCountBadge">0 Players</span>
+              </div>
+              
+              <form id="createForm" class="stack">
+                <div class="stack gap-sm">
+                  <label for="civilianWord">Topic A (Majority)</label>
+                  <input id="civilianWord" name="civilianWord" placeholder="e.g. Summer at the beach" required>
                 </div>
-                <div class="actions">
-                    <button id="startBtn" type="button">开始游戏一</button>
-                    <button id="finishBtn" type="button" class="secondary">结束投票</button>
+                <div class="stack gap-sm">
+                  <label for="undercoverWord">Topic B (Undercover)</label>
+                  <input id="undercoverWord" name="undercoverWord" placeholder="e.g. Winter at the beach" required>
                 </div>
+                <button type="submit" class="btn btn-primary">Create Round</button>
+              </form>
+              <div id="formError" class="badge badge-danger" hidden></div>
             </div>
-            <div>
-                <span class="label">倒计时（自动进入投票）</span>
-                <div class="countdown-display" id="countdownText">--</div>
-                <p class="hint">描述阶段 2 分 30 秒，最后 30 秒所有手环会振动提醒。</p>
-            </div>
-        </div>
 
-        <div class="card stack">
-            <h2>词语配置</h2>
-            <div class="share-box">
-                <div class="share-item">
-                    <span class="label">主题 A（S-S-S-L 震动）</span>
-                    <strong id="civilianWordText">-</strong>
+            <div class="card stack">
+              <h2>Wristbands</h2>
+              <div class="row between center">
+                <p>Ensure all players have active wristbands.</p>
+                <button type="button" class="btn btn-secondary" id="refreshDevicesBtn">Refresh</button>
+              </div>
+              <div id="deviceList" class="hint">Scanning...</div>
+            </div>
+          </div>
+
+          <!-- Right Col: Vibration Experience (Preview) -->
+          <div class="stack" style="flex: 1; min-width: 300px;">
+            <div class="card stack" id="previewPanel" hidden>
+              <div class="row between center">
+                <h2>Vibration Experience</h2>
+                <div class="row center gap-sm">
+                  <label class="row center gap-xs" style="font-size: 0.9rem; cursor: pointer;">
+                    <input type="checkbox" id="mockModeCheck">
+                    <span>Mock Mode</span>
+                  </label>
+                  <button id="startBtn" type="button" class="btn btn-primary" disabled>Start Game</button>
                 </div>
-                <div class="share-item">
-                    <span class="label">主题 B（S-S-L-L 震动）</span>
-                    <strong id="undercoverWordText">-</strong>
+              </div>
+              <p class="hint">Preview patterns so players can learn the rhythm before the game starts.</p>
+              
+              <div class="vibe-grid">
+                <div class="vibe-card">
+                  <div class="vibe-card-content">
+                    <div>
+                      <div class="badge badge-success" style="margin-bottom: 0.5rem;">Pattern A</div>
+                      <div class="vibe-title" id="civilianWordText">Topic A</div>
+                      <canvas class="vibe-wave" id="vibeWaveA"></canvas>
+                      <div class="hint">S-S-S-L</div>
+                    </div>
+                    <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="previewPattern('A')">Test Vibe A</button>
+                  </div>
                 </div>
-            </div>
-        </div>
-
-        <div class="card stack">
-            <h2>参与者（<span id="playerCount">0</span>）</h2>
-            <div class="hint">玩家加入顺序即下方列表顺序</div>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>昵称</th>
-                        <th>词语</th>
-                        <th>投票</th>
-                        <th>身份</th>
-                    </tr>
-                    </thead>
-                    <tbody id="playersTable">
-                    <tr>
-                        <td colspan="4" class="empty">暂无玩家</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-
-        <div class="card stack">
-            <h2>投票统计</h2>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>玩家</th>
-                        <th>票数</th>
-                    </tr>
-                    </thead>
-                    <tbody id="voteTable">
-                    <tr>
-                        <td colspan="2" class="empty">暂无投票</td>
-                    </tr>
-                    </tbody>
-                </table>
-            </div>
-        </div>
-    </div>
-
-    <div class="stack">
-        <div class="card stack">
-            <div>
-                <h1>游戏二 · LegoSense（情绪浮现）</h1>
-                <p class="hint">收集玩家提交的情绪词，手动分组并下发颜色。</p>
-            </div>
-            <div class="row wrap gap">
-                <div>
-                    <span class="label">状态</span>
-                    <div class="status-badge" id="legoSenseStatus">未开始</div>
+                
+                <div class="vibe-card">
+                  <div class="vibe-card-content">
+                    <div>
+                      <div class="badge badge-danger" style="margin-bottom: 0.5rem;">Pattern B</div>
+                      <div class="vibe-title" id="undercoverWordText">Topic B</div>
+                      <canvas class="vibe-wave" id="vibeWaveB"></canvas>
+                      <div class="hint">S-S-L-L</div>
+                    </div>
+                    <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;" onclick="previewPattern('B')">Test Vibe B</button>
+                  </div>
                 </div>
-                <div class="actions">
-                    <button id="startSenseBtn" type="button">开始游戏二</button>
-                    <button id="applyGroupBtn" type="button">应用 LED 分组</button>
-                </div>
+              </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Phase 2: In-game -->
+      <section id="game1-play" class="stack" hidden>
+        <div class="countdown-container">
+          <div class="countdown-value" id="countdownText">--:--</div>
+          <div class="countdown-label">Time Remaining</div>
         </div>
 
         <div class="card stack">
-            <h2>情绪走廊</h2>
-            <p class="hint">玩家在参与者页面输入的情绪词会实时出现在这里。</p>
-            <div class="table-wrapper">
-                <table>
-                    <thead>
-                    <tr>
-                        <th>玩家</th>
-                        <th>情绪词</th>
-                        <th>所属分组</th>
-                    </tr>
-                    </thead>
-                    <tbody id="legoSenseTable">
-                    <tr>
-                        <td colspan="3" class="empty">暂无提交</td>
-                    </tr>
-                    </tbody>
-                </table>
+          <h2>Active Patterns</h2>
+          <div class="vibe-grid">
+            <div class="vibe-card">
+              <div class="vibe-card-content">
+                <div class="badge badge-success">Pattern A</div>
+                <div class="vibe-title" id="civilianWordTextPlay">Topic A</div>
+                <canvas class="vibe-wave" id="vibeWaveAPlay"></canvas>
+              </div>
             </div>
+            <div class="vibe-card">
+              <div class="vibe-card-content">
+                <div class="badge badge-danger">Pattern B</div>
+                <div class="vibe-title" id="undercoverWordTextPlay">Topic B</div>
+                <canvas class="vibe-wave" id="vibeWaveBPlay"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Phase 3: Post-game & Voting -->
+      <section id="game1-wrap" class="stack" hidden>
+        <div class="row between center">
+          <h2>Voting Results</h2>
+          <button id="finishBtn" type="button" class="btn btn-primary">Reveal & End</button>
         </div>
 
-        <div class="card stack">
-            <h2>分组配置</h2>
-            <p class="hint">添加分组（名称+颜色），为玩家选择分组后点击“应用 LED 分组”。</p>
-            <form id="addGroupForm" class="row wrap gap">
-                <input id="groupName" placeholder="分组名称（例：平静组）" required>
-                <input id="groupColor" type="color" value="#2b8cff" aria-label="分组颜色">
-                <button type="submit">添加分组</button>
-            </form>
-            <div id="groupPills" class="pill-row"></div>
+        <div class="row wrap gap-lg">
+          <div class="card stack" style="flex: 2;">
+            <h3>Players & Roles</h3>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Word</th>
+                    <th>Status</th>
+                    <th>Role</th>
+                  </tr>
+                </thead>
+                <tbody id="playersTable">
+                  <tr><td colspan="4" class="hint">Loading...</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card stack" style="flex: 1;">
+            <h3>Vote Summary</h3>
+            <div class="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Player</th>
+                    <th>Votes</th>
+                  </tr>
+                </thead>
+                <tbody id="voteTable">
+                  <tr><td colspan="2" class="hint">No votes yet</td></tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
         </div>
-    </div>
-</div>
+      </section>
+
+    </main>
+
+    <!-- Game 2: LegoSense (Placeholder for now, keeping structure) -->
+    <main id="view-game2" class="stack fade-in" hidden>
+      <div class="card">
+        <h2>LegoSense</h2>
+        <p>Switching to LegoSense mode...</p>
+        <!-- Existing LegoSense UI can be migrated here if needed, but focusing on Game 1 for now -->
+        <div id="legoSenseContainer"></div>
+      </div>
+    </main>
+
+  </div>
 </body>
 </html>

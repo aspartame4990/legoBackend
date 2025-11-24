@@ -18,6 +18,47 @@ from .models import (
     random_token,
 )
 
+import os
+from pathlib import Path
+
+def load_word_pairs():
+    pairs = []
+    base_path = Path("public/topic_images")
+    if not base_path.exists():
+        return []
+    
+    for subdir in base_path.iterdir():
+        if not subdir.is_dir():
+            continue
+            
+        undercover_word = subdir.name
+        undercover_img = None
+        civilian_img = None
+        civilian_word = None
+        
+        # Find images
+        for file in subdir.iterdir():
+            if file.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+                continue
+                
+            if file.stem == undercover_word:
+                undercover_img = f"{subdir.name}/{file.name}"
+            else:
+                civilian_img = f"{subdir.name}/{file.name}"
+                civilian_word = file.stem
+        
+        if undercover_word and civilian_word and undercover_img and civilian_img:
+            pairs.append({
+                "civilian": civilian_word,
+                "undercover": undercover_word,
+                "civilianImage": civilian_img,
+                "undercoverImage": undercover_img
+            })
+            
+    return pairs
+
+WORD_PAIRS = load_word_pairs()
+
 
 class GameState:
     """In-memory state for both games (lightweight, single-process)."""
@@ -32,13 +73,16 @@ class GameState:
         self.groups: Dict[str, LegoSenseGroup] = {}
         self.lego_sense_status: LegoSenseStatus = LegoSenseStatus.IDLE
 
-    async def create_game(self, civilian_word: str, undercover_word: str) -> UndercoverGame:
+    async def create_game(self, civilian_word: Optional[str] = None, undercover_word: Optional[str] = None) -> UndercoverGame:
         async with self._lock:
             await self._cancel_tasks()
             self.submissions_by_token.clear()
             self.groups.clear()
             self.lego_sense_status = LegoSenseStatus.IDLE
-            self.game = UndercoverGame(civilian_word=civilian_word, undercover_word=undercover_word)
+            self.game = UndercoverGame(
+                civilian_word=civilian_word or "",
+                undercover_word=undercover_word or ""
+            )
             return self.game
 
     async def join(self, name: str) -> Participant:
@@ -50,13 +94,38 @@ class GameState:
             game.participants[participant_id] = participant
             return participant
 
-    async def start_game(self) -> UndercoverGame:
+    async def start_game(self, mock_mode: bool = False) -> UndercoverGame:
         async with self._lock:
             game = self._require_game()
+            
+            if mock_mode:
+                # Fill with dummy players if needed
+                while len(game.participants) < 3:
+                    dummy_id = self._unique_participant_id()
+                    dummy_token = self._unique_token()
+                    dummy_name = f"Bot-{random_code(3)}"
+                    participant = Participant(dummy_id, dummy_token, dummy_name)
+                    game.participants[dummy_id] = participant
+
             if len(game.participants) < 3:
                 raise ValueError("至少需要 3 名玩家才能开始游戏")
             if game.status != GameStatus.WAITING_FOR_PLAYERS:
                 return game
+
+            # Generate words if not set
+            if not game.civilian_word or not game.undercover_word:
+                pair = random.choice(WORD_PAIRS)
+                game.civilian_word = pair["civilian"]
+                game.undercover_word = pair["undercover"]
+                game.civilian_image = pair.get("civilianImage")
+                game.undercover_image = pair.get("undercoverImage")
+                # Store image paths in game object (need to update UndercoverGame model first? Or just pass it dynamically)
+                # Since UndercoverGame is a Pydantic model, we can't just add attributes if they are not defined.
+                # But wait, UndercoverGame is defined in models.py. I should check models.py.
+                # For now, let's assume we can add them or I need to update models.py.
+                # Let's check models.py first.
+
+
             undercover = random.choice(list(game.participants.values()))
             game.undercover_participant_id = undercover.participant_id
             for p in game.participants.values():
@@ -69,6 +138,28 @@ class GameState:
             game.countdown_ends_at = now_utc() + timedelta(minutes=2, seconds=30)
             game.warning_triggered = False
             await self._schedule_tasks()
+            return game
+
+    async def switch_topic(self) -> UndercoverGame:
+        async with self._lock:
+            game = self._require_game()
+            # Reload pairs to ensure we have the latest
+            global WORD_PAIRS
+            WORD_PAIRS = load_word_pairs()
+            
+            if not WORD_PAIRS:
+                raise ValueError("No topic images found in public/topic_images/")
+
+            pair = random.choice(WORD_PAIRS)
+            game.civilian_word = pair["civilian"]
+            game.undercover_word = pair["undercover"]
+            game.civilian_image = pair.get("civilianImage")
+            game.undercover_image = pair.get("undercoverImage")
+
+            # Update all participants
+            for p in game.participants.values():
+                p.word = game.undercover_word if p.undercover else game.civilian_word
+            
             return game
 
     async def start_voting(self) -> UndercoverGame:

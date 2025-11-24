@@ -24,11 +24,16 @@ interface ParticipantView {
     word?: string | null;
     civilianWord: string;
     undercoverWord: string;
+    civilianImage?: string | null;
+    undercoverImage?: string | null;
     countdownActive: boolean;
     secondsToVoting: number;
+    warningTriggered: boolean;
     canVote: boolean;
     hasVoted: boolean;
     participants: ParticipantListItem[];
+    undercoverName?: string | null;
+    winningTeam?: "CIVILIANS" | "UNDERCOVER" | null;
     voteSummary: VoteSummaryItem[];
 }
 
@@ -58,11 +63,100 @@ const state: {
     countdownTarget: null
 };
 
+type VibeSample = 0 | 1;
+
+const VIBE_PATTERN_A: VibeSample[] = [
+    1, 1, 1, 1, 0, 0, 0,
+    1, 1, 1, 1, 0, 0, 0,
+    1, 1, 1, 1, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0
+];
+
+const VIBE_PATTERN_B: VibeSample[] = [
+    1, 1, 1, 1, 0, 0, 0,
+    1, 1, 1, 1, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 0, 0, 0
+];
+
+export function initPlayer() {
+    // Event Listeners
+    const joinForm = document.getElementById("joinForm") as HTMLFormElement | null;
+    if (joinForm) joinForm.addEventListener("submit", handleJoin);
+
+    // const voteSection = document.getElementById("voteSection");
+    // if (voteSection) voteSection.addEventListener("click", handleVoteClick);
+
+    // Draw initial waves (empty or placeholder)
+    // drawVibeWave("playerVibeWaveA", VIBE_PATTERN_A);
+    // drawVibeWave("playerVibeWaveB", VIBE_PATTERN_B);
+
+    // Check if we have a session
+    const stored = localStorage.getItem("participantToken");
+    if (stored) {
+        state.token = stored;
+        fetchParticipantView();
+        startPolling();
+    }
+}
+
 document.addEventListener("DOMContentLoaded", () => {
-    (document.getElementById("joinForm") as HTMLFormElement).addEventListener("submit", handleJoin);
-    (document.getElementById("submitEmotionBtn") as HTMLButtonElement).addEventListener("click", submitEmotion);
-    resumeSession();
+    initPlayer();
 });
+
+function drawVibeWave(canvasId: string, samples: VibeSample[]) {
+    const canvas = document.getElementById(canvasId) as HTMLCanvasElement | null;
+    if (!canvas || !samples.length) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+    const dpr = window.devicePixelRatio || 1;
+    const width = canvas.clientWidth || 200;
+    const height = canvas.clientHeight || 32;
+    canvas.width = width * dpr;
+    canvas.height = height * dpr;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
+    const baseY = height * 0.8;
+    const low = height * 0.15;
+    const high = height * 0.6;
+    const step = width / samples.length;
+
+    const gradient = ctx.createLinearGradient(0, 0, 0, height);
+    gradient.addColorStop(0, "#f97316");
+    gradient.addColorStop(1, "#facc15");
+    ctx.strokeStyle = gradient;
+    ctx.lineCap = "round";
+    ctx.lineWidth = Math.max(1, step * 0.7);
+
+    const durationMs = 2000;
+    let start: number | null = null;
+
+    function frame(timestamp: number) {
+        if (!ctx) return;
+        if (start === null) start = timestamp;
+        const elapsed = (timestamp - start) % durationMs;
+        const ratio = elapsed / durationMs;
+        const offset = Math.floor(ratio * samples.length);
+
+        ctx.clearRect(0, 0, width, height);
+
+        samples.forEach((_, index) => {
+            const sampleIndex = (offset + index) % samples.length;
+            const value = samples[sampleIndex];
+            const px = index * step + step / 2;
+            const barHeight = value ? high : low;
+            const yTop = baseY - barHeight;
+            ctx.beginPath();
+            ctx.moveTo(px, baseY);
+            ctx.lineTo(px, yTop);
+            ctx.stroke();
+        });
+
+        requestAnimationFrame(frame);
+    }
+
+    requestAnimationFrame(frame);
+}
 
 function loadSession() {
     try {
@@ -87,9 +181,10 @@ async function handleJoin(event: Event) {
     hideJoinError();
     const name = (document.getElementById("playerName") as HTMLInputElement).value.trim();
     if (!name) {
-        showJoinError("请填写昵称");
+        showJoinError("Please enter a nickname");
         return;
     }
+    setJoinButtonDisabled(true);
     try {
         const response = await fetch(`/api/game/participants`, {
             method: "POST",
@@ -98,7 +193,7 @@ async function handleJoin(event: Event) {
         });
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.detail || "加入失败");
+            throw new Error(error.detail || "Failed to join");
         }
         const data = (await response.json()) as JoinResponse;
         const session = { participantId: data.participantId, token: data.participantToken, name };
@@ -106,6 +201,7 @@ async function handleJoin(event: Event) {
         activateSession(session);
     } catch (err: any) {
         showJoinError(err.message);
+        setJoinButtonDisabled(false);
     }
 }
 
@@ -119,11 +215,13 @@ function activateSession(session: { participantId: string; token: string; name: 
     state.token = session.token;
     state.name = session.name;
     (document.getElementById("panelName") as HTMLElement).textContent = session.name;
-    setJoinButtonDisabled(true);
+
+    // Switch view
     (document.getElementById("joinCard") as HTMLElement).hidden = true;
     (document.getElementById("playerPanel") as HTMLElement).hidden = false;
+
     startPolling();
-    startLegoSensePolling();
+    // startLegoSensePolling();
 }
 
 function startPolling() {
@@ -136,13 +234,13 @@ async function fetchParticipantView() {
     if (!state.token) return;
     try {
         const response = await fetch(`/api/participants/${state.token}`);
-        if (!response.ok) throw new Error("获取玩家信息失败");
+        if (!response.ok) throw new Error("Failed to fetch player state");
         const data = (await response.json()) as ParticipantView;
         state.name = data.name;
         renderParticipant(data);
     } catch (err) {
         console.error(err);
-        alert("当前游戏已失效或被重置，请重新加入。");
+        alert("The current round is no longer valid. Please join again.");
         resetSession();
     }
 }
@@ -150,39 +248,46 @@ async function fetchParticipantView() {
 function renderParticipant(view: ParticipantView) {
     (document.getElementById("panelStatus") as HTMLElement).textContent = statusLabel(view.status);
     (document.getElementById("panelName") as HTMLElement).textContent = view.name;
+
+    // Phase Switching
+    const waitingPhase = document.getElementById("phase-waiting");
+    const gamePhase = document.getElementById("phase-game");
+    const votingPhase = document.getElementById("phase-voting");
+
+    if (waitingPhase) waitingPhase.hidden = true;
+    if (gamePhase) gamePhase.hidden = true;
+    if (votingPhase) votingPhase.hidden = true;
+
+    if (view.status === "WAITING_FOR_PLAYERS") {
+        if (waitingPhase) waitingPhase.hidden = false;
+    } else if (view.status === "IN_PROGRESS") {
+        if (gamePhase) gamePhase.hidden = false;
+    } else {
+        if (votingPhase) votingPhase.hidden = false;
+    }
+
     updateWords(view);
     updateParticipantCountdown(view);
-    renderPlayers(view.participants, view.participantId);
+    // renderPlayers(view.participants, view.participantId);
     renderVoteSection(view);
     renderVoteResults(view.voteSummary);
-}
-
-function renderPlayers(players: ParticipantListItem[], selfId: string) {
-    const list = document.getElementById("playersList") as HTMLElement;
-    list.innerHTML = "";
-    if (!players?.length) {
-        list.innerHTML = "<li>暂无玩家</li>";
-        return;
-    }
-    players.forEach((player) => {
-        const li = document.createElement("li");
-        li.textContent = player.name + (player.participantId === selfId ? "（我）" : "");
-        list.appendChild(li);
-    });
+    // renderGameResult(view);
 }
 
 function renderVoteSection(view: ParticipantView) {
     const box = document.getElementById("voteSection") as HTMLElement;
+    if (!box) return;
+
     if (view.status !== "VOTING") {
-        box.innerHTML = `<div class="hint">等待房主开启投票</div>`;
+        box.innerHTML = `<p class="hint">Waiting for the host to start voting.</p>`;
         return;
     }
     if (!view.canVote) {
-        box.innerHTML = `<div class="hint">本轮无需你投票，请等待结果。</div>`;
+        box.innerHTML = `<p class="hint">You don't need to vote this round. Please wait for the result.</p>`;
         return;
     }
     if (view.hasVoted) {
-        box.innerHTML = `<div class="hint">已提交投票，请等待房主公布结果。</div>`;
+        box.innerHTML = `<p class="hint">Vote submitted. Wait for the host to reveal the result.</p>`;
         return;
     }
     const options = view.participants
@@ -190,13 +295,13 @@ function renderVoteSection(view: ParticipantView) {
         .map((player) => `<option value="${player.participantId}">${player.name}</option>`)
         .join("");
     if (!options) {
-        box.innerHTML = `<div class="hint">暂无可投票的对象</div>`;
+        box.innerHTML = `<p class="hint">No one to vote for yet.</p>`;
         return;
     }
     box.innerHTML = `
-        <div class="vote-area">
+        <div class="stack">
             <select id="voteTarget">${options}</select>
-            <button type="button" id="voteBtn">提交投票</button>
+            <button type="button" id="voteBtn" class="btn btn-primary">Submit Vote</button>
         </div>
     `;
     (document.getElementById("voteBtn") as HTMLButtonElement).addEventListener("click", submitVote);
@@ -207,7 +312,7 @@ function renderVoteResults(summary: VoteSummaryItem[]) {
     if (!tbody) return;
     tbody.innerHTML = "";
     if (!summary?.length) {
-        tbody.innerHTML = `<tr><td colspan="2" class="empty">暂无投票</td></tr>`;
+        tbody.innerHTML = `<tr><td colspan="2" class="hint">No votes yet</td></tr>`;
         return;
     }
     summary.forEach((item) => {
@@ -218,21 +323,36 @@ function renderVoteResults(summary: VoteSummaryItem[]) {
 }
 
 function updateWords(view: ParticipantView) {
-    (document.getElementById("wordOneText") as HTMLElement).textContent = view.civilianWord ?? "-";
-    (document.getElementById("wordTwoText") as HTMLElement).textContent = view.undercoverWord ?? "-";
+    const w1 = document.getElementById("wordOneText");
+    const w2 = document.getElementById("wordTwoText");
+    if (w1) w1.textContent = view.civilianWord ?? "-";
+    if (w2) w2.textContent = view.undercoverWord ?? "-";
+
+    const img1 = document.getElementById("playerImageA") as HTMLImageElement;
+    const img2 = document.getElementById("playerImageB") as HTMLImageElement;
+    if (img1 && view.civilianImage) img1.src = `/topic_images/${view.civilianImage}`;
+    if (img2 && view.undercoverImage) img2.src = `/topic_images/${view.undercoverImage}`;
 }
 
 function updateParticipantCountdown(view: ParticipantView) {
     const el = document.getElementById("participantCountdown") as HTMLElement;
+    if (!el) return;
+
     if (view.countdownActive) {
         state.countdownTarget = Date.now() + view.secondsToVoting * 1000;
         if (!state.countdownTimer) {
             state.countdownTimer = window.setInterval(() => tickParticipantCountdown(el), 1000);
         }
         el.textContent = formatSeconds(view.secondsToVoting);
+        if (view.warningTriggered) {
+            el.style.color = "var(--danger)";
+        } else {
+            el.style.color = "";
+        }
     } else {
         clearParticipantCountdown();
-        el.textContent = view.status === "IN_PROGRESS" ? "等待自动进入投票" : "--";
+        el.textContent = view.status === "IN_PROGRESS" ? "Waiting..." : "--:--";
+        el.style.color = "";
     }
 }
 
@@ -263,7 +383,7 @@ async function submitVote() {
         });
         if (!response.ok) {
             const error = await response.json().catch(() => ({}));
-            throw new Error(error.detail || "投票失败");
+            throw new Error(error.detail || "Failed to submit vote");
         }
         await fetchParticipantView();
     } catch (err: any) {
@@ -304,16 +424,11 @@ function hideJoinError() {
 
 function statusLabel(status: GameStatus) {
     switch (status) {
-        case "WAITING_FOR_PLAYERS":
-            return "等待开始";
-        case "IN_PROGRESS":
-            return "描述阶段";
-        case "VOTING":
-            return "投票阶段";
-        case "FINISHED":
-            return "游戏结束";
-        default:
-            return "未知";
+        case "WAITING_FOR_PLAYERS": return "Waiting";
+        case "IN_PROGRESS": return "Building";
+        case "VOTING": return "Voting";
+        case "FINISHED": return "Finished";
+        default: return "Unknown";
     }
 }
 
@@ -327,79 +442,4 @@ function formatSeconds(seconds: number) {
 function setJoinButtonDisabled(disabled: boolean) {
     const button = document.querySelector<HTMLButtonElement>("#joinForm button[type='submit']");
     if (button) button.disabled = disabled;
-}
-
-// ----- LegoSense -----
-function startLegoSensePolling() {
-    if (state.legoSensePoll) clearInterval(state.legoSensePoll);
-    fetchLegoSenseView();
-    state.legoSensePoll = window.setInterval(fetchLegoSenseView, 5000);
-}
-
-async function fetchLegoSenseView() {
-    if (!state.token) return;
-    try {
-        const response = await fetch(`/api/legosense/player/${state.token}`);
-        if (!response.ok) return;
-        const data = (await response.json()) as LegoSensePlayerView;
-        renderLegoSense(data);
-    } catch (err) {
-        console.error(err);
-    }
-}
-
-async function submitEmotion() {
-    const emotionInput = document.getElementById("emotionInput") as HTMLInputElement;
-    const emotion = emotionInput.value.trim();
-    if (!emotion) {
-        (document.getElementById("emotionHint") as HTMLElement).textContent = "请先输入一个情绪词";
-        return;
-    }
-    try {
-        const response = await fetch("/api/legosense/submit", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ participantToken: state.token, emotion })
-        });
-        if (!response.ok) {
-            const error = await response.json().catch(() => ({}));
-            throw new Error(error.detail || "提交失败");
-        }
-        (document.getElementById("emotionHint") as HTMLElement).textContent = "已提交，等待主持人分组。";
-        fetchLegoSenseView();
-    } catch (err: any) {
-        alert(err.message);
-    }
-}
-
-function renderLegoSense(view: LegoSensePlayerView) {
-    (document.getElementById("legoSenseStatus") as HTMLElement).textContent = legoSenseStatusLabel(view.status);
-    (document.getElementById("legoSenseGroup") as HTMLElement).textContent = view.groupName ?? "-";
-    const colorEl = document.getElementById("legoSenseColor") as HTMLElement;
-    if (view.color) {
-        colorEl.textContent = view.color;
-        colorEl.style.setProperty("--chip-color", view.color);
-    } else {
-        colorEl.textContent = "尚未下发";
-        colorEl.style.removeProperty("--chip-color");
-    }
-    const hintEl = document.getElementById("emotionHint") as HTMLElement;
-    if (view.submitted && view.emotion) {
-        hintEl.textContent = `已提交：${view.emotion}`;
-    } else {
-        hintEl.textContent = "提交后房主会把你分入同色小组。";
-    }
-}
-
-function legoSenseStatusLabel(status: LegoSenseStatus) {
-    switch (status) {
-        case "COLLECTING":
-            return "收集中";
-        case "GROUPING":
-            return "分组中";
-        case "APPLIED":
-            return "已下发";
-        default:
-            return "未开始";
-    }
 }
