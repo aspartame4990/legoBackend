@@ -1048,7 +1048,7 @@ function renderLegoSense(data: LegoSenseHostView) {
             </div>
         </div>
 
-        <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem;">
+        <div class="vibe-grid">
             ${data.participants.map(p => `
                 <div class="vibe-card">
                     <div class="vibe-card-content">
