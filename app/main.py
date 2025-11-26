@@ -31,6 +31,14 @@ from .schemas import (
 from .state import state
 from .hardware import router as hardware_router
 
+BASE_DIR = Path(__file__).resolve().parent.parent
+STATIC_DIR = BASE_DIR / "static"
+TOPIC_IMAGES_DIR = BASE_DIR / "public" / "topic_images"
+
+# Ensure static folders exist so mount won't crash if build hasn't run yet
+STATIC_DIR.mkdir(parents=True, exist_ok=True)
+TOPIC_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
+
 app = FastAPI(title="Lego Backend (FastAPI)")
 
 # Allow local dev front-ends
@@ -370,7 +378,7 @@ async def debug_images():
     }
 
 # Serve static assets (built JS/CSS/HTML)
-app.mount("/topic_images", StaticFiles(directory="public/topic_images"), name="topic_images")
-app.mount("/", StaticFiles(directory="static", html=True), name="static")
+app.mount("/topic_images", StaticFiles(directory=TOPIC_IMAGES_DIR), name="topic_images")
+app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")
 
 app.include_router(hardware_router)
