@@ -64,6 +64,7 @@ const state: {
     lastVibrationId: string | null;
     selectionMade: boolean;
     lastStatus: GameStatus | null;
+    assignedPattern: 'A' | 'B' | null;
 } = {
     participantId: null,
     token: null,
@@ -71,7 +72,8 @@ const state: {
     countdownTarget: null,
     lastVibrationId: null,
     selectionMade: false,
-    lastStatus: null
+    lastStatus: null,
+    assignedPattern: null
 };
 
 type VibeSample = 0 | 1;
@@ -325,6 +327,13 @@ function renderParticipantView(view: ParticipantView) {
     if (statusChanged && (view.status === "WAITING_FOR_PLAYERS" || view.status === "IN_PROGRESS")) {
         // New round or returned to lobby, allow a fresh selection
         resetCardSelection();
+    }
+
+    // Determine which pattern belongs to this player for flip enforcement
+    if (view.word && view.undercoverWord && view.civilianWord) {
+        state.assignedPattern = view.word === view.undercoverWord ? "B" : "A";
+    } else {
+        state.assignedPattern = null;
     }
 
     (document.getElementById("panelStatus") as HTMLElement).textContent = statusLabel(view.status);
@@ -704,6 +713,18 @@ async function handleImageUpload(e: Event) {
 
     if (!card) return;
 
+    if (!state.assignedPattern) {
+        showToast("Waiting for your word assignment. Please try again.", "warning");
+        return;
+    }
+
+    if (pattern !== state.assignedPattern) {
+        card.classList.add('shake');
+        setTimeout(() => card.classList.remove('shake'), 500);
+        showToast(`This is not your card. Flip Pattern ${state.assignedPattern}.`, "warning");
+        return;
+    }
+
     // Only allow the first selection to flip; afterwards, just warn.
     if (state.selectionMade) {
         card.classList.add('shake');
@@ -796,6 +817,7 @@ function resetSession() {
     state.name = null;
     state.selectionMade = false;
     state.lastStatus = null;
+    state.assignedPattern = null;
     localStorage.removeItem("participantToken");
     if (state.pollHandle) {
         clearInterval(state.pollHandle);
