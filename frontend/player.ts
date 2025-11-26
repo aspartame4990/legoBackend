@@ -64,7 +64,6 @@ const state: {
     lastVibrationId: string | null;
     selectionMade: boolean;
     lastStatus: GameStatus | null;
-    assignedPattern: 'A' | 'B' | null;
 } = {
     participantId: null,
     token: null,
@@ -72,8 +71,7 @@ const state: {
     countdownTarget: null,
     lastVibrationId: null,
     selectionMade: false,
-    lastStatus: null,
-    assignedPattern: null
+    lastStatus: null
 };
 
 type VibeSample = 0 | 1;
@@ -329,13 +327,6 @@ function renderParticipantView(view: ParticipantView) {
         resetCardSelection();
     }
 
-    // Determine which pattern belongs to this player for flip enforcement
-    if (view.word && view.undercoverWord && view.civilianWord) {
-        state.assignedPattern = view.word === view.undercoverWord ? "B" : "A";
-    } else {
-        state.assignedPattern = null;
-    }
-
     (document.getElementById("panelStatus") as HTMLElement).textContent = statusLabel(view.status);
     (document.getElementById("panelName") as HTMLElement).textContent = view.name;
 
@@ -518,20 +509,23 @@ function renderVoteSection(view: ParticipantView) {
 
     box.innerHTML = `
         <div class="card stack center" style="background: var(--surface); border: 1px solid var(--border); padding: 1.5rem;">
-            <h3 style="margin-bottom: 1rem; color: var(--text-main);">🗳️ Vote for the Undercover</h3>
-            <p class="hint" style="margin-bottom: 1.5rem;">Tap on the player you suspect!</p>
-            <div class="vote-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 1rem; width: 100%;">
+            <h3 style="margin-bottom: 0.75rem; color: var(--text-main);">🗳️ Vote for the Undercover</h3>
+            <p class="hint" style="margin-bottom: 1.25rem;">Tap on the player you suspect!</p>
+            <div class="vote-gallery">
                 ${view.participants
             .filter(p => p.participantId !== view.participantId)
             .map(p => `
-                    <div class="vote-card" onclick="castVote('${p.participantId}')" style="cursor: pointer; transition: transform 0.2s;">
-                        <div class="vote-img-container" style="width: 80px; height: 80px; margin: 0 auto 0.5rem; border-radius: 50%; overflow: hidden; border: 3px solid var(--primary); background: var(--surface-hover);">
+                    <button class="vote-card-lg" onclick="castVote('${p.participantId}')">
+                        <div class="vote-photo">
                             ${p.workImage
-                    ? `<img src="${p.workImage}" class="vote-img" style="width: 100%; height: 100%; object-fit: cover;">`
-                    : `<div class="vote-img-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--text-muted);">?</div>`}
+                ? `<img src="${p.workImage}" alt="${p.name}'s work">`
+                : `<div class="vote-img-placeholder">?</div>`}
                         </div>
-                        <div class="vote-name" style="font-weight: 600; color: var(--text-main);">${p.name}</div>
-                    </div>
+                        <div class="vote-meta">
+                            <div class="vote-name">${p.name}</div>
+                            <div class="vote-hint">Tap to vote</div>
+                        </div>
+                    </button>
                 `).join("")}
             </div>
         </div>
@@ -711,18 +705,6 @@ async function handleImageUpload(e: Event) {
 
     if (!card) return;
 
-    if (!state.assignedPattern) {
-        showToast("Waiting for your word assignment. Please try again.", "warning");
-        return;
-    }
-
-    if (pattern !== state.assignedPattern) {
-        card.classList.add('shake');
-        setTimeout(() => card.classList.remove('shake'), 500);
-        showToast(`This is not your card. Flip Pattern ${state.assignedPattern}.`, "warning");
-        return;
-    }
-
     // Only allow the first selection to flip; afterwards, just warn.
     if (state.selectionMade) {
         card.classList.add('shake');
@@ -815,7 +797,6 @@ function resetSession() {
     state.name = null;
     state.selectionMade = false;
     state.lastStatus = null;
-    state.assignedPattern = null;
     localStorage.removeItem("participantToken");
     if (state.pollHandle) {
         clearInterval(state.pollHandle);
