@@ -111,7 +111,7 @@ class LegoSenseHostView(BaseModel):
     status: LegoSenseStatus
     submissions: List[LegoSenseSubmissionView]
     groups: List[LegoSenseGroupView]
-    participants: List[str]
+    participants: List[HostParticipantView]
 
 
 class LegoSensePlayerView(BaseModel):

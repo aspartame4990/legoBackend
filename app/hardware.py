@@ -57,5 +57,6 @@ async def led(_req: LedRequest):
     预留的 LED 颜色指令接口。
     当前实现为 no-op，后续可接入 MQTT / WebSocket 推送到 ESP32。
     """
+    print(f"[Hardware] LED Request: color={_req.color}, audience={_req.audience}, player={_req.playerName}")
     return {"status": "ok"}
 

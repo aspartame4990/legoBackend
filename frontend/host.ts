@@ -55,7 +55,7 @@ interface LegoSenseHostView {
     status: LegoSenseStatus;
     submissions: LegoSenseSubmissionView[];
     groups: LegoSenseGroupView[];
-    participants: string[];
+    participants: HostParticipantView[];
 }
 
 type GroupDraft = { id: string; name: string; color: string; memberTokens: string[] };
@@ -657,7 +657,7 @@ function renderGallery(view: HostGameView) {
                 <div class="vibe-card-content">
                     <div class="row between center" style="width: 100%; margin-bottom: 0.5rem;">
                         <strong>${p.name}</strong>
-                        ${p.mood ? `<span class="badge badge-primary">${p.mood}</span>` : ''}
+                        ${p.mood ? `<span style="font-size: 1.5rem;">${p.mood}</span>` : ''}
                     </div>
                     <div style="width: 100%; aspect-ratio: 1; background: #eee; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
                         ${p.workImage
@@ -1032,5 +1032,78 @@ async function fetchLegoSenseHostView() {
 }
 
 function renderLegoSense(data: LegoSenseHostView) {
-    // Placeholder for LegoSense rendering
+    const container = document.getElementById("view-game2");
+    if (!container) return;
+
+    // Basic Layout
+    container.innerHTML = `
+        <div class="row between center" style="margin-bottom: 2rem;">
+            <div class="stack">
+                <h1>LegoSense Gallery</h1>
+                <p class="hint">Visualizing player emotions</p>
+            </div>
+            <div class="row gap-sm">
+                <button class="btn btn-primary" onclick="triggerMoodLights()">
+                    💡 Light Up Bracelets
+                </button>
+            </div>
+        </div>
+
+        <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 1.5rem;">
+            ${data.participants.map(p => `
+                <div class="vibe-card">
+                    <div class="vibe-card-content">
+                        <div class="row between center" style="width: 100%; margin-bottom: 0.5rem;">
+                            <strong>${p.name}</strong>
+                            ${p.mood ? `<span style="font-size: 1.5rem;">${p.mood}</span>` : ''}
+                        </div>
+                        <div style="width: 100%; aspect-ratio: 1; background: #eee; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                            ${p.workImage
+            ? `<img src="${p.workImage}" style="width: 100%; height: 100%; object-fit: cover;">`
+            : `<span class="hint">No Image</span>`}
+                        </div>
+                        <div class="hint" style="margin-top: 0.5rem;">
+                            ${p.undercover ? "Undercover" : "Civilian"}
+                        </div>
+                    </div>
+                </div>
+            `).join("")}
+        </div>
+    `;
 }
+
+// Expose triggerMoodLights
+(window as any).triggerMoodLights = async () => {
+    if (!state.lastView?.participants) return;
+
+    const MOOD_COLORS: Record<string, string> = {
+        "😊": "#FACC15", // Yellow
+        "😢": "#3B82F6", // Blue
+        "😡": "#EF4444", // Red
+        "😎": "#22C55E", // Green
+        "😍": "#EC4899", // Pink
+        "😲": "#A855F7"  // Purple
+    };
+
+    console.log("Triggering mood lights...");
+
+    for (const p of state.lastView.participants) {
+        if (p.mood && MOOD_COLORS[p.mood]) {
+            try {
+                // Send individual LED command
+                await fetch("/api/hardware/led", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        color: MOOD_COLORS[p.mood],
+                        audience: "PLAYER",
+                        playerName: p.name
+                    })
+                });
+            } catch (err) {
+                console.error(`Failed to light up for ${p.name}`, err);
+            }
+        }
+    }
+    alert("Lights triggered!");
+};

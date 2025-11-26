@@ -139,9 +139,19 @@ async def start_legosense():
 @app.get("/api/legosense/host", response_model=LegoSenseHostView)
 async def legosense_host():
     game = state.game
-    participants = sorted([p.name for p in game.participants.values()], key=str.lower) if game else []
-    submissions = list(state.submissions_by_token.values())
-    groups = list(state.groups.values())
+    participants_view = [
+        HostParticipantView(
+            participantId=p.participant_id,
+            name=p.name,
+            word=p.word,
+            undercover=p.undercover,
+            hasVoted=p.has_voted,
+            workImage=p.work_image,
+            mood=p.mood,
+        )
+        for p in game.participants.values()
+    ] if game else []
+
     return LegoSenseHostView(
         status=state.lego_sense_status,
         submissions=[
@@ -168,7 +178,7 @@ async def legosense_host():
             )
             for g in groups
         ],
-        participants=participants,
+        participants=participants_view,
     )
 
 

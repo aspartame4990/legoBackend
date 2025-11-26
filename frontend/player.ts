@@ -461,28 +461,34 @@ function renderGameResult(view: ParticipantView) {
             
             <div class="card stack" style="width: 100%; margin-top: 1rem;">
                 <h3>How do you feel?</h3>
-                <div class="row center gap-sm">
-                    <input type="text" id="moodInput" placeholder="Enter one word (e.g. Excited)" class="input" style="flex: 1;">
-                    <button class="btn btn-primary" onclick="submitMood()">Submit</button>
+                <div class="emoji-grid" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 1rem; width: 100%;">
+                    ${["😊", "😢", "😡", "😎", "😍", "😲"].map(emoji => `
+                        <button class="btn btn-outline" style="font-size: 2rem; padding: 1rem;" onclick="submitMood('${emoji}')">
+                            ${emoji}
+                        </button>
+                    `).join("")}
                 </div>
             </div>
         </div>
     `;
 
     // Expose submitMood
-    (window as any).submitMood = async () => {
-        const input = document.getElementById("moodInput") as HTMLInputElement;
-        if (!input || !input.value.trim()) return;
+    // Expose submitMood
+    (window as any).submitMood = async (mood: string) => {
+        if (!mood) return;
         try {
             await fetch("/api/game/submit-mood", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ participantToken: state.token, mood: input.value.trim() })
+                body: JSON.stringify({ participantToken: state.token, mood: mood })
             });
-            alert("Mood submitted!");
-            input.disabled = true;
+            showToast(`Mood ${mood} submitted!`, "success");
+
+            // Disable buttons to prevent spamming
+            const buttons = document.querySelectorAll(".emoji-grid button");
+            buttons.forEach((btn: any) => btn.disabled = true);
         } catch (err) {
-            alert("Failed to submit mood");
+            showToast("Failed to submit mood", "error");
         }
     };
 }
