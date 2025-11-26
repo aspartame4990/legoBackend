@@ -6,11 +6,6 @@ interface JoinResponse {
     participantToken: string;
 }
 
-interface ParticipantListItem {
-    participantId: string;
-    name: string;
-}
-
 interface VoteSummaryItem {
     participantId: string;
     name: string;
@@ -32,10 +27,20 @@ interface ParticipantView {
     canVote: boolean;
     hasVoted: boolean;
     participants: ParticipantListItem[];
-    undercoverName?: string | null;
     winningTeam?: "CIVILIANS" | "UNDERCOVER" | null;
     voteSummary: VoteSummaryItem[];
+    latestVibrationId?: string | null;
+    latestVibrationPattern?: string | null;
+    resultsRevealed: boolean;
+    undercoverName?: string | null;
 }
+
+interface ParticipantListItem {
+    participantId: string;
+    name: string;
+    workImage?: string | null;
+}
+
 
 interface LegoSensePlayerView {
     status: LegoSenseStatus;
@@ -56,11 +61,17 @@ const state: {
     countdownTimer?: number;
     countdownTarget: number | null;
     legoSensePoll?: number;
+    lastVibrationId: string | null;
+    selectionMade: boolean;
+    lastStatus: GameStatus | null;
 } = {
     participantId: null,
     token: null,
     name: null,
-    countdownTarget: null
+    countdownTarget: null,
+    lastVibrationId: null,
+    selectionMade: false,
+    lastStatus: null
 };
 
 type VibeSample = 0 | 1;
@@ -134,7 +145,7 @@ export function initPlayer() {
         state.token = stored;
         fetchParticipantView();
         startPolling();
-    } else {
+    } else if (!resumeSession()) {
         // Pre-fill random name
         const nameInput = document.getElementById("playerName") as HTMLInputElement;
         if (nameInput) nameInput.value = generateRandomName();
@@ -216,6 +227,7 @@ function loadSession() {
 
 function saveSession(session: { participantId: string; token: string; name: string }) {
     sessionStorage.setItem(STORAGE_KEY, JSON.stringify(session));
+    localStorage.setItem("participantToken", session.token);
 }
 
 function clearSessionStorage() {
@@ -246,14 +258,23 @@ async function handleJoin(event: Event) {
         saveSession(session);
         activateSession(session);
     } catch (err: any) {
-        showJoinError(err.message);
+        // If the error is "No active game", it means the host hasn't started one.
+        if (err.message.includes("No active game")) {
+            showJoinError("No active game found. Please ask the Host to open the game.");
+        } else {
+            showJoinError(err.message);
+        }
         setJoinButtonDisabled(false);
     }
 }
 
 function resumeSession() {
     const saved = loadSession();
-    if (saved) activateSession(saved);
+    if (saved) {
+        activateSession(saved);
+        return true;
+    }
+    return false;
 }
 
 function activateSession(session: { participantId: string; token: string; name: string }) {
@@ -279,19 +300,33 @@ function startPolling() {
 async function fetchParticipantView() {
     if (!state.token) return;
     try {
-        const response = await fetch(`/api/participants/${state.token}`);
-        if (!response.ok) throw new Error("Failed to fetch player state");
+        const response = await fetch(`/api/game/participant?token=${state.token}`);
+        if (response.status === 404 || response.status === 400) {
+            // Game invalid or token invalid
+            alert("The current round is no longer valid. Please join again.");
+            resetSession();
+            return;
+        }
+        if (!response.ok) {
+            // Other errors, maybe transient
+            return;
+        }
         const data = (await response.json()) as ParticipantView;
         state.name = data.name;
-        renderParticipant(data);
+        (window as any).lastParticipantView = data;
+        renderParticipantView(data);
     } catch (err) {
         console.error(err);
-        alert("The current round is no longer valid. Please join again.");
-        resetSession();
     }
 }
 
-function renderParticipant(view: ParticipantView) {
+function renderParticipantView(view: ParticipantView) {
+    const statusChanged = view.status !== state.lastStatus;
+    if (statusChanged && (view.status === "WAITING_FOR_PLAYERS" || view.status === "IN_PROGRESS")) {
+        // New round or returned to lobby, allow a fresh selection
+        resetCardSelection();
+    }
+
     (document.getElementById("panelStatus") as HTMLElement).textContent = statusLabel(view.status);
     (document.getElementById("panelName") as HTMLElement).textContent = view.name;
 
@@ -299,58 +334,210 @@ function renderParticipant(view: ParticipantView) {
     const waitingPhase = document.getElementById("phase-waiting");
     const gamePhase = document.getElementById("phase-game");
     const votingPhase = document.getElementById("phase-voting");
+    const resultPhase = document.getElementById("phase-result");
 
     if (waitingPhase) waitingPhase.hidden = true;
     if (gamePhase) gamePhase.hidden = true;
     if (votingPhase) votingPhase.hidden = true;
+    if (resultPhase) resultPhase.hidden = true;
 
     if (view.status === "WAITING_FOR_PLAYERS") {
         if (waitingPhase) waitingPhase.hidden = false;
     } else if (view.status === "IN_PROGRESS") {
         if (gamePhase) gamePhase.hidden = false;
-    } else {
+
+        // Upload Section (Only show if not uploaded yet? Or allow re-upload?)
+        // For simplicity, let's add an upload button in the game phase
+        let uploadContainer = document.getElementById("uploadContainer");
+        if (!uploadContainer && gamePhase) {
+            const container = document.createElement("div");
+            container.id = "uploadContainer";
+            container.className = "card stack";
+            container.style.marginTop = "1rem";
+            container.innerHTML = `
+                <h3>Upload Your Work</h3>
+                <input type="file" id="workUpload" accept="image/*" style="display: none">
+                <button class="btn btn-outline" onclick="document.getElementById('workUpload').click()">
+                    📷 Take Photo / Upload
+                </button>
+                <div id="uploadPreview" style="margin-top: 0.5rem;"></div>
+            `;
+            gamePhase.appendChild(container);
+
+            const input = container.querySelector("input");
+            input?.addEventListener("change", (window as any).handleImageUpload);
+        }
+    } else if (view.status === "VOTING") {
+        // Voting Phase
         if (votingPhase) votingPhase.hidden = false;
+        renderVoteSection(view);
+        renderVoteResults(view.voteSummary);
+
+        // Allow upload in voting phase too if not uploaded
+        let uploadContainer = document.getElementById("uploadContainerVoting");
+        if (!uploadContainer && votingPhase) {
+            console.log("Creating upload container for voting phase");
+            const container = document.createElement("div");
+            container.id = "uploadContainerVoting";
+            container.className = "card stack";
+            container.style.marginBottom = "1rem"; // Add spacing
+            container.innerHTML = `
+                <h3>Your Work</h3>
+                <input type="file" id="workUploadVoting" accept="image/*" style="display: none">
+                <button class="btn btn-outline" onclick="document.getElementById('workUploadVoting').click()">
+                    📷 Take Photo / Upload
+                </button>
+                <div id="uploadPreviewVoting" style="margin-top: 0.5rem;"></div>
+            `;
+            // Insert at the top
+            votingPhase.insertBefore(container, votingPhase.firstChild);
+
+            const input = container.querySelector("input");
+            input?.addEventListener("change", (window as any).handleImageUpload);
+        }
+    } else if (view.status === "FINISHED") {
+        // Result Phase
+        if (resultPhase) resultPhase.hidden = false;
+        renderGameResult(view);
+
+
     }
 
     updateWords(view);
     updateParticipantCountdown(view);
     // renderPlayers(view.participants, view.participantId);
-    renderVoteSection(view);
-    renderVoteResults(view.voteSummary);
-    // renderGameResult(view);
+    // renderVoteSection(view); // This is now handled inside the status blocks
+    // renderVoteResults(view.voteSummary); // This is now handled inside the status blocks
+    // renderGameResult(view); // This is now handled inside the status blocks
+
+    // Check for vibration trigger
+    if (view.latestVibrationId && view.latestVibrationId !== state.lastVibrationId) {
+        state.lastVibrationId = view.latestVibrationId;
+        if (view.latestVibrationPattern) {
+            triggerBleVibration(view.latestVibrationPattern);
+        }
+    }
+
+    state.lastStatus = view.status;
+}
+
+async function triggerBleVibration(pattern: string) {
+    if (!bleCharacteristic) return;
+    try {
+        const encoder = new TextEncoder();
+        await bleCharacteristic.writeValue(encoder.encode(pattern));
+        console.log(`Triggered vibration ${pattern} on bracelet`);
+    } catch (err) {
+        console.error("Failed to trigger vibration on bracelet:", err);
+    }
+}
+
+
+function renderGameResult(view: ParticipantView) {
+    const container = document.getElementById("resultContent");
+    if (!container) return;
+
+    if (!view.resultsRevealed) {
+        container.innerHTML = `
+            <div class="stack center">
+                <h2>Game Over</h2>
+                <p>Waiting for host to reveal results...</p>
+                <div class="animate-pulse" style="width: 40px; height: 40px; background: var(--surface-hover); border-radius: 50%;"></div>
+            </div>
+        `;
+        return;
+    }
+
+    const isWinner = (view.winningTeam === "CIVILIANS" && view.civilianWord === view.word) ||
+        (view.winningTeam === "UNDERCOVER" && view.undercoverWord === view.word);
+
+    container.innerHTML = `
+        <div class="stack center">
+            <div class="result-icon">${isWinner ? "👑" : "💀"}</div>
+            <h2>${isWinner ? "Victory!" : "Defeat"}</h2>
+            <p>The Undercover was: <strong>${view.undercoverName || "Unknown"}</strong></p>
+            <p class="hint">Civilian Word: ${view.civilianWord}</p>
+            <p class="hint">Undercover Word: ${view.undercoverWord}</p>
+            
+            <div class="card stack" style="width: 100%; margin-top: 1rem;">
+                <h3>How do you feel?</h3>
+                <div class="row center gap-sm">
+                    <input type="text" id="moodInput" placeholder="Enter one word (e.g. Excited)" class="input" style="flex: 1;">
+                    <button class="btn btn-primary" onclick="submitMood()">Submit</button>
+                </div>
+            </div>
+        </div>
+    `;
+
+    // Expose submitMood
+    (window as any).submitMood = async () => {
+        const input = document.getElementById("moodInput") as HTMLInputElement;
+        if (!input || !input.value.trim()) return;
+        try {
+            await fetch("/api/game/submit-mood", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ participantToken: state.token, mood: input.value.trim() })
+            });
+            alert("Mood submitted!");
+            input.disabled = true;
+        } catch (err) {
+            alert("Failed to submit mood");
+        }
+    };
 }
 
 function renderVoteSection(view: ParticipantView) {
     const box = document.getElementById("voteSection") as HTMLElement;
     if (!box) return;
 
-    if (view.status !== "VOTING") {
-        box.innerHTML = `<p class="hint">Waiting for the host to start voting.</p>`;
-        return;
-    }
-    if (!view.canVote) {
-        box.innerHTML = `<p class="hint">You don't need to vote this round. Please wait for the result.</p>`;
-        return;
-    }
     if (view.hasVoted) {
-        box.innerHTML = `<p class="hint">Vote submitted. Wait for the host to reveal the result.</p>`;
+        box.innerHTML = `<div class="hint">Waiting for others to vote...</div>`;
         return;
     }
-    const options = view.participants
-        .filter((player) => player.participantId !== view.participantId)
-        .map((player) => `<option value="${player.participantId}">${player.name}</option>`)
-        .join("");
-    if (!options) {
-        box.innerHTML = `<p class="hint">No one to vote for yet.</p>`;
+
+    if (!view.canVote) {
+        box.innerHTML = `<div class="hint">Voting is not open yet</div>`;
         return;
     }
+
     box.innerHTML = `
-        <div class="stack">
-            <select id="voteTarget">${options}</select>
-            <button type="button" id="voteBtn" class="btn btn-primary">Submit Vote</button>
+        <div class="card stack center" style="background: var(--surface); border: 1px solid var(--border); padding: 1.5rem;">
+            <h3 style="margin-bottom: 1rem; color: var(--text-main);">🗳️ Vote for the Undercover</h3>
+            <p class="hint" style="margin-bottom: 1.5rem;">Tap on the player you suspect!</p>
+            <div class="vote-grid" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 1rem; width: 100%;">
+                ${view.participants
+            .filter(p => p.participantId !== view.participantId)
+            .map(p => `
+                    <div class="vote-card" onclick="castVote('${p.participantId}')" style="cursor: pointer; transition: transform 0.2s;">
+                        <div class="vote-img-container" style="width: 80px; height: 80px; margin: 0 auto 0.5rem; border-radius: 50%; overflow: hidden; border: 3px solid var(--primary); background: var(--surface-hover);">
+                            ${p.workImage
+                    ? `<img src="${p.workImage}" class="vote-img" style="width: 100%; height: 100%; object-fit: cover;">`
+                    : `<div class="vote-img-placeholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 2rem; color: var(--text-muted);">?</div>`}
+                        </div>
+                        <div class="vote-name" style="font-weight: 600; color: var(--text-main);">${p.name}</div>
+                    </div>
+                `).join("")}
+            </div>
         </div>
     `;
-    (document.getElementById("voteBtn") as HTMLButtonElement).addEventListener("click", submitVote);
+    // Expose castVote globally for onclick
+    (window as any).castVote = async (targetParticipantId: string) => {
+        try {
+            const response = await fetch(`/api/game/votes`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ voterToken: state.token, targetParticipantId: targetParticipantId })
+            });
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.detail || "Failed to submit vote");
+            }
+            await fetchParticipantView();
+        } catch (err: any) {
+            alert(err.message);
+        }
+    };
 }
 
 function renderVoteResults(summary: VoteSummaryItem[]) {
@@ -384,21 +571,27 @@ function updateParticipantCountdown(view: ParticipantView) {
     const el = document.getElementById("participantCountdown") as HTMLElement;
     if (!el) return;
 
+    const timerEl = el; // Renaming for clarity based on the new snippet's variable name
     if (view.countdownActive) {
-        state.countdownTarget = Date.now() + view.secondsToVoting * 1000;
-        if (!state.countdownTimer) {
+        state.countdownTarget = Date.now() + view.secondsToVoting * 1000; // Keep this for consistency if state.countdownTarget is used elsewhere
+        if (!state.countdownTimer) { // Keep this if a timer is still needed for ticking down
             state.countdownTimer = window.setInterval(() => tickParticipantCountdown(el), 1000);
         }
-        el.textContent = formatSeconds(view.secondsToVoting);
-        if (view.warningTriggered) {
-            el.style.color = "var(--danger)";
+        const mins = Math.floor(view.secondsToVoting / 60);
+        const secs = view.secondsToVoting % 60;
+        timerEl.textContent = `${mins}:${secs.toString().padStart(2, "0")}`;
+        if (view.secondsToVoting <= 30) {
+            timerEl.style.color = "var(--danger)";
+            timerEl.classList.add("pulse");
         } else {
-            el.style.color = "";
+            timerEl.style.color = "";
+            timerEl.classList.remove("pulse");
         }
     } else {
-        clearParticipantCountdown();
-        el.textContent = view.status === "IN_PROGRESS" ? "Waiting..." : "--:--";
-        el.style.color = "";
+        clearParticipantCountdown(); // Clear existing timer if countdown is no longer active
+        timerEl.textContent = "Waiting for host...";
+        timerEl.style.color = "var(--text-muted)";
+        timerEl.classList.remove("pulse");
     }
 }
 
@@ -437,10 +630,167 @@ async function submitVote() {
     }
 }
 
+async function handleImageUpload(e: Event) {
+    const input = e.target as HTMLInputElement;
+    if (input.files && input.files[0]) {
+        const file = input.files[0];
+        if (!state.token) {
+            alert("Please join the game again before uploading.");
+            return;
+        }
+        try {
+            const base64 = await compressImage(file);
+            if (!base64) {
+                throw new Error("Image encoding failed");
+            }
+
+            // Show preview in all possible containers
+            const ids = ["uploadPreview", "uploadPreviewVoting", "uploadPreviewResult"];
+            ids.forEach(id => {
+                const preview = document.getElementById(id);
+                if (preview) {
+                    preview.innerHTML = `<img src="${base64}" style="width: 100%; border-radius: 8px;">`;
+                }
+            });
+
+            console.debug("Uploading work", { token: state.token, imageLength: base64.length });
+
+            // Upload
+            const response = await fetch("/api/game/upload-work", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ participantToken: state.token, image: base64 })
+            });
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({}));
+                const detail = err?.detail;
+                let message = "Upload failed";
+                if (typeof detail === "string") {
+                    message = detail;
+                } else if (Array.isArray(detail)) {
+                    message = detail.map((d: any) => {
+                        const loc = Array.isArray(d?.loc) ? d.loc.join(".") : "";
+                        const msg = d?.msg || JSON.stringify(d);
+                        return loc ? `${loc}: ${msg}` : msg;
+                    }).join("; ");
+                } else if (detail) {
+                    message = JSON.stringify(detail);
+                } else if (response.status) {
+                    message = `Upload failed (${response.status})`;
+                }
+                throw new Error(message);
+            }
+            alert("Upload successful!");
+        } catch (err) {
+            console.error("Upload failed", err);
+            alert((err as any)?.message || "Upload failed");
+        }
+    }
+}
+
+// Expose handleImageUpload to window
+(window as any).handleImageUpload = handleImageUpload;
+
+// Reveal Card Logic
+(window as any).revealCard = (pattern: 'A' | 'B') => {
+    const cardId = pattern === 'A' ? 'flipCardA' : 'flipCardB';
+    const card = document.getElementById(cardId);
+
+    if (!card) return;
+
+    // Only allow the first selection to flip; afterwards, just warn.
+    if (state.selectionMade) {
+        card.classList.add('shake');
+        setTimeout(() => card.classList.remove('shake'), 500);
+        showToast("You already picked a card.", "warning");
+        return;
+    }
+
+    card.classList.add('flipped');
+    state.selectionMade = true;
+};
+
+function resetCardSelection() {
+    state.selectionMade = false;
+    const cards = ["flipCardA", "flipCardB"];
+    cards.forEach(id => {
+        const el = document.getElementById(id);
+        el?.classList.remove("flipped", "shake");
+    });
+}
+
+// Downscale large images before uploading to avoid oversized payloads
+async function compressImage(file: File, maxSize: number = 1024, quality: number = 0.7): Promise<string> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        const objectUrl = URL.createObjectURL(file);
+        img.onload = () => {
+            const canvas = document.createElement("canvas");
+            const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+            const width = Math.max(1, Math.round(img.width * scale));
+            const height = Math.max(1, Math.round(img.height * scale));
+            canvas.width = width;
+            canvas.height = height;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) {
+                URL.revokeObjectURL(objectUrl);
+                reject(new Error("Canvas not supported"));
+                return;
+            }
+            ctx.drawImage(img, 0, 0, width, height);
+            URL.revokeObjectURL(objectUrl);
+            try {
+                const dataUrl = canvas.toDataURL("image/jpeg", quality);
+                resolve(dataUrl);
+            } catch (err) {
+                reject(err);
+            }
+        };
+        img.onerror = (err) => {
+            URL.revokeObjectURL(objectUrl);
+            reject(err);
+        };
+        img.src = objectUrl;
+    });
+}
+
+function showToast(message: string, type: "success" | "error" | "warning" | "info" = "info") {
+    let container = document.getElementById("toast-container");
+    if (!container) {
+        container = document.createElement("div");
+        container.id = "toast-container";
+        container.style.position = "fixed";
+        container.style.bottom = "20px";
+        container.style.left = "50%";
+        container.style.transform = "translateX(-50%)";
+        container.style.zIndex = "1000";
+        container.style.display = "flex";
+        container.style.flexDirection = "column";
+        container.style.gap = "10px";
+        document.body.appendChild(container);
+    }
+
+    const toast = document.createElement("div");
+    toast.className = `badge badge-${type === "error" ? "danger" : type === "success" ? "success" : "neutral"}`;
+    toast.style.padding = "1rem 2rem";
+    toast.style.boxShadow = "0 4px 6px rgba(0,0,0,0.1)";
+    toast.style.fontSize = "1rem";
+    toast.textContent = message;
+
+    container.appendChild(toast);
+
+    setTimeout(() => {
+        toast.remove();
+    }, 3000);
+}
+
 function resetSession() {
     state.participantId = null;
     state.token = null;
     state.name = null;
+    state.selectionMade = false;
+    state.lastStatus = null;
+    localStorage.removeItem("participantToken");
     if (state.pollHandle) {
         clearInterval(state.pollHandle);
         state.pollHandle = undefined;
@@ -496,7 +846,8 @@ async function connectToBleDevice() {
     try {
         const nav = navigator as any;
         if (!nav.bluetooth) {
-            alert("Web Bluetooth is not supported in this browser. Please use Chrome Android or Bluefy on iOS.");
+            console.warn("navigator.bluetooth is undefined. This usually means you are not using HTTPS or Localhost.");
+            alert("Web Bluetooth API is missing. If you are using Chrome on PC, please ensure you are accessing via 'localhost' or HTTPS, or have enabled the 'Insecure origins treated as secure' flag for this IP.");
             return;
         }
 

@@ -23,8 +23,14 @@ from pathlib import Path
 
 def load_word_pairs():
     pairs = []
-    base_path = Path("public/topic_images")
+    # Use absolute path relative to this file
+    base_path = Path(__file__).parent.parent / "public" / "topic_images"
+    # Store for debug
+    import sys
+    sys.modules[__name__].base_path_debug = base_path
+    
     if not base_path.exists():
+        print(f"Warning: {base_path} does not exist")
         return []
     
     for subdir in base_path.iterdir():
@@ -41,7 +47,7 @@ def load_word_pairs():
             if file.suffix.lower() not in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
                 continue
                 
-            if file.stem == undercover_word:
+            if file.stem.lower() == undercover_word.lower():
                 undercover_img = f"{subdir.name}/{file.name}"
             else:
                 civilian_img = f"{subdir.name}/{file.name}"
@@ -54,6 +60,15 @@ def load_word_pairs():
                 "civilianImage": civilian_img,
                 "undercoverImage": undercover_img
             })
+            
+    if not pairs:
+        print("Warning: No topic images found. Using fallback.")
+        pairs.append({
+            "civilian": "Cat",
+            "undercover": "Dog",
+            "civilianImage": None,
+            "undercoverImage": None
+        })
             
     return pairs
 
@@ -72,6 +87,7 @@ class GameState:
         self.submissions_by_token: Dict[str, EmotionSubmission] = {}
         self.groups: Dict[str, LegoSenseGroup] = {}
         self.lego_sense_status: LegoSenseStatus = LegoSenseStatus.IDLE
+        self.latest_vibration: Optional[Dict[str, str]] = None  # { "id": "...", "pattern": "A" }
 
     async def create_game(self, civilian_word: Optional[str] = None, undercover_word: Optional[str] = None) -> UndercoverGame:
         async with self._lock:
@@ -94,6 +110,13 @@ class GameState:
             game.participants[participant_id] = participant
             return participant
 
+    async def remove_participant(self, participant_id: str) -> None:
+        async with self._lock:
+            game = self._require_game()
+            if participant_id in game.participants:
+                del game.participants[participant_id]
+
+
     async def start_game(self, mock_mode: bool = False) -> UndercoverGame:
         async with self._lock:
             game = self._require_game()
@@ -114,6 +137,13 @@ class GameState:
 
             # Generate words if not set
             if not game.civilian_word or not game.undercover_word:
+                global WORD_PAIRS
+                if not WORD_PAIRS:
+                    WORD_PAIRS = load_word_pairs()
+                
+                if not WORD_PAIRS:
+                     raise ValueError("No topic images found and no fallback available.")
+
                 pair = random.choice(WORD_PAIRS)
                 game.civilian_word = pair["civilian"]
                 game.undercover_word = pair["undercover"]
@@ -135,9 +165,9 @@ class GameState:
                 p.has_voted = False
             game.reset_votes()
             game.status = GameStatus.IN_PROGRESS
-            game.countdown_ends_at = now_utc() + timedelta(minutes=2, seconds=30)
+            game.countdown_ends_at = None # Wait for manual start
             game.warning_triggered = False
-            await self._schedule_tasks()
+            # await self._schedule_tasks() # Don't schedule yet
             return game
 
     async def switch_topic(self) -> UndercoverGame:
@@ -160,6 +190,20 @@ class GameState:
             for p in game.participants.values():
                 p.word = game.undercover_word if p.undercover else game.civilian_word
             
+            # Reset timer
+            game.countdown_ends_at = None
+            await self._cancel_tasks()
+            
+            return game
+
+    async def start_timer(self) -> UndercoverGame:
+        async with self._lock:
+            game = self._require_game()
+            if game.status != GameStatus.IN_PROGRESS:
+                raise ValueError("Game must be in progress to start timer")
+            
+            game.countdown_ends_at = now_utc() + timedelta(seconds=30)
+            await self._schedule_tasks()
             return game
 
     async def start_voting(self) -> UndercoverGame:
@@ -201,9 +245,6 @@ class GameState:
                 raise ValueError("不能投给自己")
             game.votes[voter.participant_id] = target_id
             voter.has_voted = True
-            all_voted = all(p.has_voted for p in game.participants.values())
-            if all_voted:
-                await self.finish_game()
             return game
 
     async def set_lego_sense_started(self) -> None:
@@ -238,6 +279,28 @@ class GameState:
             else:
                 self.lego_sense_status = LegoSenseStatus.COLLECTING
 
+    async def upload_work(self, token: str, image: str) -> None:
+        async with self._lock:
+            participant = self._get_by_token(token)
+            participant.work_image = image
+
+    async def submit_mood(self, token: str, mood: str) -> None:
+        async with self._lock:
+            participant = self._get_by_token(token)
+            participant.mood = mood
+
+    async def reveal_results(self) -> None:
+        async with self._lock:
+            game = self._require_game()
+            game.results_revealed = True
+
+    async def trigger_vibration(self, pattern: str) -> None:
+        async with self._lock:
+            self.latest_vibration = {
+                "id": random_code(8),
+                "pattern": pattern
+            }
+
     async def _schedule_tasks(self) -> None:
         await self._cancel_tasks()
         if not self.game or not self.game.countdown_ends_at:
@@ -245,7 +308,7 @@ class GameState:
         seconds = (self.game.countdown_ends_at - now_utc()).total_seconds()
         warning_delay = max(0, seconds - 30)
         self.warning_task = asyncio.create_task(self._warning_after(warning_delay))
-        self.voting_task = asyncio.create_task(self._voting_after(seconds))
+        # self.voting_task = asyncio.create_task(self._voting_after(seconds)) # Disable auto-voting
 
     async def _warning_after(self, delay: float) -> None:
         await asyncio.sleep(delay)

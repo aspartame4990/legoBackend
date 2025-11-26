@@ -3,11 +3,13 @@ from __future__ import annotations
 import itertools
 from datetime import timedelta
 from typing import Dict, List
+from pathlib import Path
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
+from . import schemas
 from .models import GameStatus, LegoSenseGroup, LegoSenseStatus, Team, now_utc, random_code
 from .schemas import (
     ApplyGroupsRequest,
@@ -63,6 +65,12 @@ async def join_game(payload: JoinGameRequest):
     return JoinGameResponse(participantId=participant.participant_id, participantToken=participant.token)
 
 
+@app.delete("/api/game/participants/{participant_id}", status_code=204)
+async def remove_participant(participant_id: str):
+    await state.remove_participant(participant_id)
+
+
+
 @app.post("/api/game/start", status_code=202)
 async def start_game(mockMode: bool = False):
     try:
@@ -79,9 +87,22 @@ async def switch_topic():
         raise HTTPException(status_code=400, detail=str(exc))
 
 
+@app.post("/api/game/timer", status_code=202)
+async def start_timer():
+    try:
+        await state.start_timer()
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
 @app.post("/api/game/finish", status_code=202)
 async def finish_voting():
     await state.finish_game()
+
+
+@app.post("/api/game/vote-start", status_code=202)
+async def start_voting():
+    await state.start_voting()
 
 
 @app.post("/api/game/votes", status_code=202)
@@ -93,6 +114,11 @@ async def vote(payload: VoteRequest):
 
 
 @app.get("/api/participants/{token}", response_model=ParticipantView)
+async def participant_view_path(token: str):
+    return await participant_view(token)
+
+
+@app.get("/api/game/participant", response_model=ParticipantView)
 async def participant_view(token: str):
     game = state.game
     if not game:
@@ -203,6 +229,8 @@ def to_host_view(game) -> HostGameView:
             word=p.word,
             undercover=p.undercover,
             hasVoted=p.has_voted,
+            workImage=p.work_image,
+            mood=p.mood,
         )
         for p in game.participants.values()
     ]
@@ -226,6 +254,7 @@ def to_host_view(game) -> HostGameView:
         undercoverName=undercover_name,
         winningTeam=game.winning_team,
         voteSummary=vote_summary,
+        resultsRevealed=game.results_revealed,
     )
 
 
@@ -255,13 +284,25 @@ def to_participant_view(game, participant) -> ParticipantView:
         canVote=game.status == GameStatus.VOTING and not participant.has_voted,
         hasVoted=participant.has_voted,
         participants=[
-            ParticipantListItem(participantId=p.participant_id, name=p.name)
+            ParticipantListItem(
+                participantId=p.participant_id,
+                name=p.name,
+                workImage=p.work_image
+            )
             for p in sorted(game.participants.values(), key=lambda p: p.name.lower())
         ],
         undercoverName=undercover_name,
         winningTeam=game.winning_team,
         voteSummary=vote_summary,
+        latestVibrationId=state.latest_vibration["id"] if state.latest_vibration else None,
+        latestVibrationPattern=state.latest_vibration["pattern"] if state.latest_vibration else None,
+        resultsRevealed=game.results_revealed,
     )
+
+
+@app.post("/api/game/vibrate", status_code=202)
+async def trigger_vibration(pattern: str):
+    await state.trigger_vibration(pattern)
 
 
 def build_vote_summary(game) -> List[VoteSummaryItem]:
@@ -278,7 +319,46 @@ def build_vote_summary(game) -> List[VoteSummaryItem]:
     ]
 
 
+@app.post("/api/game/upload-work", status_code=200)
+async def upload_work(payload: schemas.UploadWorkRequest = Body(...)):
+    try:
+        await state.upload_work(payload.participantToken, payload.image)
+        return {"status": "ok"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/game/submit-mood", status_code=200)
+async def submit_mood(payload: schemas.SubmitMoodRequest):
+    try:
+        await state.submit_mood(payload.participantToken, payload.mood)
+        return {"status": "ok"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.post("/api/game/reveal", status_code=200)
+async def reveal_results():
+    try:
+        await state.reveal_results()
+        return {"status": "ok"}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc))
+
+
+@app.get("/api/debug/images")
+async def debug_images():
+    from .state import load_word_pairs
+    pairs = load_word_pairs()
+    base_path = state.base_path_debug if hasattr(state, "base_path_debug") else "Unknown"
+    return {
+        "pairs": pairs,
+        "base_path_resolved": str(base_path),
+        "cwd": str(Path.cwd())
+    }
+
 # Serve static assets (built JS/CSS/HTML)
+app.mount("/topic_images", StaticFiles(directory="public/topic_images"), name="topic_images")
 app.mount("/", StaticFiles(directory="static", html=True), name="static")
 
 app.include_router(hardware_router)

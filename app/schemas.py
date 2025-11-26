@@ -25,6 +25,7 @@ class JoinGameResponse(BaseModel):
 class ParticipantListItem(BaseModel):
     participantId: str
     name: str
+    workImage: Optional[str] = None
 
 
 class VoteSummaryItem(BaseModel):
@@ -39,10 +40,11 @@ class HostParticipantView(BaseModel):
     word: Optional[str]
     undercover: bool
     hasVoted: bool
+    workImage: Optional[str] = None
+    mood: Optional[str] = None
 
 
 class HostGameView(BaseModel):
-    civilianWord: str
     civilianWord: str
     undercoverWord: str
     civilianImage: Optional[str] = None
@@ -57,6 +59,7 @@ class HostGameView(BaseModel):
     undercoverName: Optional[str]
     winningTeam: Optional[Team]
     voteSummary: List[VoteSummaryItem]
+    resultsRevealed: bool
 
 
 class ParticipantView(BaseModel):
@@ -64,7 +67,6 @@ class ParticipantView(BaseModel):
     name: str
     status: GameStatus
     word: Optional[str]
-    civilianWord: str
     civilianWord: str
     undercoverWord: str
     civilianImage: Optional[str] = None
@@ -78,6 +80,9 @@ class ParticipantView(BaseModel):
     undercoverName: Optional[str]
     winningTeam: Optional[Team]
     voteSummary: List[VoteSummaryItem]
+    latestVibrationId: Optional[str] = None
+    latestVibrationPattern: Optional[str] = None
+    resultsRevealed: bool
 
 
 class VoteRequest(BaseModel):
@@ -132,3 +137,13 @@ class ApplyGroupsRequest(BaseModel):
         memberTokens: List[str] = Field(default_factory=list)
 
     groups: List[GroupDefinition] = Field(default_factory=list)
+
+
+class UploadWorkRequest(BaseModel):
+    participantToken: str
+    image: str  # Base64
+
+
+class SubmitMoodRequest(BaseModel):
+    participantToken: str
+    mood: str

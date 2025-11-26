@@ -29,6 +29,8 @@ class Participant:
     undercover: bool = False
     word: Optional[str] = None
     has_voted: bool = False
+    work_image: Optional[str] = None  # Base64 or URL
+    mood: Optional[str] = None
 
 
 @dataclass
@@ -46,6 +48,7 @@ class UndercoverGame:
     votes: Dict[str, str] = field(default_factory=dict)
     warning_triggered: bool = False
     winning_team: Optional[Team] = None
+    results_revealed: bool = False
 
     def reset_votes(self) -> None:
         self.votes.clear()

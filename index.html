@@ -82,15 +82,19 @@
                   <div class="empty-state">Waiting for players to join...</div>
                 </div>
 
-                <div class="actions">
-                  <div class="checkbox-wrapper">
-                    <input type="checkbox" id="mockModeCheck">
-                    <label for="mockModeCheck">Mock Mode (Allow &lt; 3 players)</label>
+                <div class="actions stack">
+                  <div class="row between center">
+                    <div class="checkbox-wrapper row center gap-sm">
+                      <input type="checkbox" id="mockModeCheck">
+                      <label for="mockModeCheck"
+                        title="Enable this to start the game with fewer than 3 players for testing purposes.">Test
+                        Mode</label>
+                    </div>
+                    <button id="btnStartGame" class="btn btn-primary" disabled>
+                      Start Game
+                    </button>
                   </div>
-                  <button id="btnStartGame" class="btn btn-primary" disabled>
-                    Start Game
-                  </button>
-                  <button id="btnForceStart" class="btn btn-secondary">
+                  <button id="btnForceStart" class="btn btn-secondary" style="width: 100%;">
                     Force Start (Skip Wristbands)
                   </button>
                 </div>
@@ -117,41 +121,30 @@
                 <div class="card-header">
                   <h2><span class="icon">〰️</span> Vibration Experience</h2>
                 </div>
-                <div class="preview-grid">
-                  <div class="preview-item">
-                    <label>Civilian Pattern</label>
-                    <canvas id="canvasPreviewA"></canvas>
-                  </div>
-                  <div class="preview-item">
-                    <label>Undercover Pattern</label>
-                    <canvas id="canvasPreviewB"></canvas>
-                  </div>
-                </div>
-
                 <div class="vibe-grid">
                   <div class="vibe-card">
                     <div class="vibe-card-content">
                       <div>
-                        <div class="badge badge-success" style="margin-bottom: 0.5rem;">Pattern A</div>
+                        <div class="badge badge-success" style="margin-bottom: 0.5rem;">Civilian</div>
                         <div class="vibe-title" id="civilianWordText">Topic A</div>
                         <canvas class="vibe-wave" id="vibeWaveA"></canvas>
                         <div class="hint">S-S-S-L</div>
                       </div>
                       <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;"
-                        onclick="previewPattern('A')">Test Vibe A</button>
+                        onclick="previewPattern('A')">Test Vibe</button>
                     </div>
                   </div>
 
                   <div class="vibe-card">
                     <div class="vibe-card-content">
                       <div>
-                        <div class="badge badge-danger" style="margin-bottom: 0.5rem;">Pattern B</div>
+                        <div class="badge badge-danger" style="margin-bottom: 0.5rem;">Undercover</div>
                         <div class="vibe-title" id="undercoverWordText">Topic B</div>
                         <canvas class="vibe-wave" id="vibeWaveB"></canvas>
                         <div class="hint">S-S-L-L</div>
                       </div>
                       <button class="btn btn-secondary" style="width: 100%; margin-top: 1rem;"
-                        onclick="previewPattern('B')">Test Vibe B</button>
+                        onclick="previewPattern('B')">Test Vibe</button>
                     </div>
                   </div>
                 </div>
@@ -165,22 +158,34 @@
           <div class="countdown-container">
             <div class="countdown-value" id="countdownText">--:--</div>
             <div class="countdown-label">Time Remaining</div>
+            <div class="row gap-sm center" style="margin-top: 1rem;">
+              <button id="btnStartTimer" class="btn btn-primary">
+                <span class="icon">▶️</span> Start Timer
+              </button>
+              <button id="btnStartVoting" class="btn btn-primary" hidden>
+                <span class="icon">🗳️</span> Start Voting
+              </button>
+            </div>
           </div>
 
           <div class="card stack">
             <div class="row between center">
-              <h2>Active Patterns</h2>
-              <button id="btnSwitchTopic" class="btn btn-secondary">
-                <span class="icon">🔄</span> Switch Topic
-              </button>
+              <h2>Current Round</h2>
+              <div class="row gap-sm">
+                <button id="btnSwitchTopic" class="btn btn-secondary">
+                  <span class="icon">🔄</span> Switch Topic
+                </button>
+                <button id="btnNextPhase" class="btn btn-primary">
+                  Next Phase <span class="icon">➡️</span>
+                </button>
+              </div>
             </div>
             <div class="vibe-grid">
               <div class="vibe-card">
                 <div class="vibe-card-content">
                   <div class="badge badge-success">Civilian</div>
                   <div class="vibe-title" id="civilianWordTextPlay">Topic A</div>
-                  <img id="civilianImagePlay" src="" alt="Topic A Image"
-                    style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; margin: 0.5rem 0;">
+                  <img id="civilianImagePlay" src="" alt="Topic A Image" class="topic-image">
                   <canvas class="vibe-wave" id="vibeWaveAPlay"></canvas>
                 </div>
               </div>
@@ -188,20 +193,34 @@
                 <div class="vibe-card-content">
                   <div class="badge badge-danger">Undercover</div>
                   <div class="vibe-title" id="undercoverWordTextPlay">Topic B</div>
-                  <img id="undercoverImagePlay" src="" alt="Topic B Image"
-                    style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; margin: 0.5rem 0;">
+                  <img id="undercoverImagePlay" src="" alt="Topic B Image" class="topic-image">
                   <canvas class="vibe-wave" id="vibeWaveBPlay"></canvas>
                 </div>
               </div>
             </div>
+          </div>
+
+          <!-- Live Gallery -->
+          <div class="card stack">
+            <h3>Live Uploads</h3>
+            <div id="galleryGridPlay" class="vibe-grid"></div>
           </div>
         </section>
 
         <!-- Phase 3: Post-game & Voting -->
         <section id="game1-wrap" class="stack" hidden>
           <div class="row between center">
-            <h2>Voting Results</h2>
-            <button id="finishBtn" type="button" class="btn btn-primary">Reveal & End</button>
+            <h2>Voting & Results</h2>
+            <div class="row gap-sm">
+              <button id="btnRevealResults" type="button" class="btn btn-primary" hidden>Reveal Results</button>
+              <button id="finishBtn" type="button" class="btn btn-primary">End Voting</button>
+            </div>
+          </div>
+
+          <!-- Gallery for Uploaded Works -->
+          <div class="card stack">
+            <h3>Gallery</h3>
+            <div id="galleryGrid" class="vibe-grid"></div>
           </div>
 
           <div class="row wrap gap-lg">
@@ -314,25 +333,40 @@
             <h2>Your Vibration Pattern</h2>
             <p class="hint">Feel the vibration and match it to one of the patterns below.</p>
 
-            <div class="vibe-grid">
-              <div class="vibe-card">
-                <div class="vibe-card-content">
-                  <div class="badge badge-success">Pattern A</div>
-                  <div class="vibe-title" id="wordOneText">-</div>
-                  <img id="playerImageA" src="" alt="Image A"
-                    style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; margin: 0.5rem 0;">
-                  <canvas class="vibe-wave" id="playerVibeWaveA"></canvas>
-                  <div class="hint">S-S-S-L</div>
+            <div class="player-view-grid">
+              <!-- Card A (Civilian) -->
+              <div class="flip-card-container" id="flipCardA" onclick="revealCard('A')">
+                <div class="flip-card-inner">
+                  <div class="flip-card-front">
+                    <img src="/card_back.png" alt="Card Back">
+                  </div>
+                  <div class="flip-card-back">
+                    <div class="flip-card-content">
+                      <div class="badge badge-success">Pattern A</div>
+                      <div class="vibe-title" id="wordOneText">-</div>
+                      <img id="playerImageA" src="" alt="Image A" class="topic-image">
+                      <canvas class="vibe-wave" id="playerVibeWaveA"></canvas>
+                      <div class="hint">S-S-S-L</div>
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div class="vibe-card">
-                <div class="vibe-card-content">
-                  <div class="badge badge-danger">Pattern B</div>
-                  <div class="vibe-title" id="wordTwoText">-</div>
-                  <img id="playerImageB" src="" alt="Image B"
-                    style="width: 100%; max-height: 150px; object-fit: cover; border-radius: 8px; margin: 0.5rem 0;">
-                  <canvas class="vibe-wave" id="playerVibeWaveB"></canvas>
-                  <div class="hint">S-S-L-L</div>
+
+              <!-- Card B (Undercover) -->
+              <div class="flip-card-container" id="flipCardB" onclick="revealCard('B')">
+                <div class="flip-card-inner">
+                  <div class="flip-card-front">
+                    <img src="/card_back.png" alt="Card Back">
+                  </div>
+                  <div class="flip-card-back">
+                    <div class="flip-card-content">
+                      <div class="badge badge-danger">Pattern B</div>
+                      <div class="vibe-title" id="wordTwoText">-</div>
+                      <img id="playerImageB" src="" alt="Image B" class="topic-image">
+                      <canvas class="vibe-wave" id="playerVibeWaveB"></canvas>
+                      <div class="hint">S-S-L-L</div>
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -341,14 +375,6 @@
 
         <!-- Phase 3: Voting -->
         <section id="phase-voting" class="stack" hidden>
-          <div class="card stack">
-            <h2>Share Your Work</h2>
-            <p class="hint">Upload a photo of your creation before voting.</p>
-            <button class="btn btn-secondary" onclick="alert('Upload feature coming soon!')">
-              <span class="icon">📷</span> Upload Photo
-            </button>
-          </div>
-
           <div class="card stack">
             <h2>Cast Your Vote</h2>
             <div id="voteSection" class="stack">
@@ -374,6 +400,13 @@
                 </tbody>
               </table>
             </div>
+          </div>
+        </section>
+
+        <!-- Phase 4: Result -->
+        <section id="phase-result" class="stack" hidden>
+          <div class="card stack" id="resultContent">
+            <!-- Results injected here -->
           </div>
         </section>
 

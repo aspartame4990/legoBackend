@@ -7,6 +7,8 @@ interface HostParticipantView {
     word?: string | null;
     undercover: boolean;
     hasVoted: boolean;
+    workImage?: string | null;
+    mood?: string | null;
 }
 
 interface VoteSummaryItem {
@@ -30,6 +32,7 @@ interface HostGameView {
     undercoverName?: string | null;
     winningTeam?: "CIVILIANS" | "UNDERCOVER" | null;
     voteSummary: VoteSummaryItem[];
+    resultsRevealed: boolean;
 }
 
 interface LegoSenseSubmissionView {
@@ -161,6 +164,15 @@ export function initHost() {
     const switchTopicBtn = document.getElementById("btnSwitchTopic") as HTMLButtonElement | null;
     if (switchTopicBtn) switchTopicBtn.addEventListener("click", switchTopic);
 
+    const startTimerBtn = document.getElementById("btnStartTimer") as HTMLButtonElement | null;
+    if (startTimerBtn) startTimerBtn.addEventListener("click", startTimer);
+
+    const startVotingBtn = document.getElementById("btnStartVoting") as HTMLButtonElement | null;
+    if (startVotingBtn) startVotingBtn.addEventListener("click", startVoting);
+
+    const nextPhaseBtn = document.getElementById("btnNextPhase") as HTMLButtonElement | null;
+    if (nextPhaseBtn) nextPhaseBtn.addEventListener("click", startVoting);
+
     const refreshDevicesBtn = document.getElementById("refreshDevicesBtn");
     if (refreshDevicesBtn) refreshDevicesBtn.addEventListener("click", connectToBleDevice);
 
@@ -188,7 +200,11 @@ export function initHost() {
     startLegoSensePolling();
     // Check if game exists, if not create it
     checkAndCreateGame();
+
+    // Expose kick function globally
+    (window as any).kickParticipant = kickParticipant;
 }
+
 
 function setupNav() {
     const tabs = document.querySelectorAll<HTMLButtonElement>(".nav-tab");
@@ -242,13 +258,14 @@ async function checkAndCreateGame() {
             renderHostView(data);
             startPolling();
         } else {
-            // No game, create one
-            await autoCreateGame();
+            // No game exists, create one automatically
+            console.log("No active game found, creating new game...");
+            await createNewGame();
         }
     } catch (err) {
-        console.error(err);
-        // Try creating anyway if fetch failed
-        await autoCreateGame();
+        console.error("Failed to check game status:", err);
+        // Retry after delay? Or just alert?
+        // alert("Failed to connect to server. Please check if backend is running.");
     }
 }
 
@@ -293,8 +310,12 @@ function renderHostView(data: HostGameView) {
 
     const effectiveStatus = state.viewOverride ?? data.status;
 
+    // Always render gallery so uploads show up in all phases (including Voting)
+    renderGallery(data);
+
     // Update Phase Indicator
     updatePhaseIndicator(effectiveStatus);
+    updateTopicCards(data);
 
     // Switch Sections
     const setupSection = document.getElementById("game1-setup");
@@ -311,8 +332,39 @@ function renderHostView(data: HostGameView) {
         if (previewPanel) previewPanel.hidden = false;
     } else if (effectiveStatus === "IN_PROGRESS") {
         if (playSection) playSection.hidden = false;
+    } else if (data.status === "FINISHED") {
+        if (setupSection) setupSection.hidden = true; // waitingPanel
+        if (playSection) playSection.hidden = true; // gamePanel
+        if (wrapSection) { // resultPanel
+            wrapSection.hidden = false;
+
+            // Hide "End Voting" button
+            const finishBtn = document.getElementById("finishBtn");
+            if (finishBtn) finishBtn.hidden = true;
+
+            // Show Reveal Button if not revealed
+            const revealBtn = document.getElementById("btnRevealResults");
+            if (revealBtn) {
+                revealBtn.hidden = data.resultsRevealed;
+                revealBtn.onclick = revealResults;
+            }
+        }
     } else {
-        if (wrapSection) wrapSection.hidden = false;
+        // VOTING Phase
+        if (wrapSection) {
+            wrapSection.hidden = false;
+
+            // Show "End Voting" button
+            const finishBtn = document.getElementById("finishBtn");
+            if (finishBtn) finishBtn.hidden = false;
+
+            // Hide Reveal Button
+            const revealBtn = document.getElementById("btnRevealResults");
+            if (revealBtn) revealBtn.hidden = true;
+
+            // Render Gallery so host can see uploads during voting
+            renderGallery(data);
+        }
     }
 
     // Update Text Content
@@ -321,10 +373,22 @@ function renderHostView(data: HostGameView) {
     const undercoverA = document.getElementById("undercoverWordText");
     const undercoverPlay = document.getElementById("undercoverWordTextPlay");
 
-    if (civA) civA.textContent = data.civilianWord;
-    if (civPlay) civPlay.textContent = data.civilianWord;
-    if (undercoverA) undercoverA.textContent = data.undercoverWord;
-    if (undercoverPlay) undercoverPlay.textContent = data.undercoverWord;
+    if (civA) {
+        civA.textContent = data.civilianWord;
+        civA.style.display = "block";
+    }
+    if (civPlay) {
+        civPlay.textContent = data.civilianWord;
+        civPlay.style.display = data.status === "IN_PROGRESS" ? "none" : "block";
+    }
+    if (undercoverA) {
+        undercoverA.textContent = data.undercoverWord;
+        undercoverA.style.display = "block";
+    }
+    if (undercoverPlay) {
+        undercoverPlay.textContent = data.undercoverWord;
+        undercoverPlay.style.display = data.status === "IN_PROGRESS" ? "none" : "block";
+    }
 
     // Update Images
     const civImg = document.getElementById("civilianImage") as HTMLImageElement;
@@ -332,17 +396,50 @@ function renderHostView(data: HostGameView) {
     const underImg = document.getElementById("undercoverImage") as HTMLImageElement;
     const underImgPlay = document.getElementById("undercoverImagePlay") as HTMLImageElement;
 
-    if (civImg && data.civilianImage) civImg.src = `/topic_images/${data.civilianImage}`;
-    if (civImgPlay && data.civilianImage) civImgPlay.src = `/topic_images/${data.civilianImage}`;
-    if (underImg && data.undercoverImage) underImg.src = `/topic_images/${data.undercoverImage}`;
-    if (underImgPlay && data.undercoverImage) underImgPlay.src = `/topic_images/${data.undercoverImage}`;
+    if (civImg) {
+        if (data.civilianImage) {
+            // Show card back during IN_PROGRESS, real image otherwise (e.g. FINISHED)
+            const src = data.status === "IN_PROGRESS" ? "/card_back.png" : `/topic_images/${data.civilianImage}`;
+            civImg.src = src;
+            civImg.style.display = "block";
+        } else {
+            civImg.style.display = "none";
+        }
+    }
+    if (civImgPlay) {
+        if (data.civilianImage) {
+            const src = data.status === "IN_PROGRESS" ? "/card_back.png" : `/topic_images/${data.civilianImage}`;
+            civImgPlay.src = src;
+            civImgPlay.style.display = "block";
+        } else {
+            civImgPlay.style.display = "none";
+        }
+    }
+    if (underImg) {
+        if (data.undercoverImage) {
+            const src = data.status === "IN_PROGRESS" ? "/card_back.png" : `/topic_images/${data.undercoverImage}`;
+            underImg.src = src;
+            underImg.style.display = "block";
+        } else {
+            underImg.style.display = "none";
+        }
+    }
+    if (underImgPlay) {
+        if (data.undercoverImage) {
+            const src = data.status === "IN_PROGRESS" ? "/card_back.png" : `/topic_images/${data.undercoverImage}`;
+            underImgPlay.src = src;
+            underImgPlay.style.display = "block";
+        } else {
+            underImgPlay.style.display = "none";
+        }
+    }
 
     const playerCountBadge = document.getElementById("playerCountBadge");
     if (playerCountBadge) playerCountBadge.textContent = `${data.totalParticipants} Players`;
 
     updateButtons(data);
     updateCountdown(data);
-    renderParticipants(data.participants, data.status);
+    renderParticipants(data.participants, data.status, data.resultsRevealed);
     renderVotes(data.voteSummary);
 }
 
@@ -365,28 +462,58 @@ function updatePhaseIndicator(status: GameStatus) {
     }
 }
 
-function renderParticipants(participants: HostParticipantView[], status: GameStatus) {
-    const tbody = document.getElementById("playersTable") as HTMLElement;
-    if (!tbody) return;
-    tbody.innerHTML = "";
-    if (!participants?.length) {
-        tbody.innerHTML = `<tr><td colspan="4" class="hint">No players joined yet</td></tr>`;
-        return;
+function renderParticipants(participants: HostParticipantView[], status: GameStatus, revealed: boolean) {
+    const listContainer = document.getElementById("playerListWait");
+    if (listContainer) {
+        // Render for Waiting Phase (Card List)
+        if (!participants?.length) {
+            listContainer.innerHTML = `<div class="empty-state">Waiting for players to join...</div>`;
+        } else {
+            listContainer.innerHTML = participants.map(p => `
+                <div class="player-item row between center">
+                    <div class="row center gap-sm">
+                        <span class="icon">👤</span>
+                        <span class="player-name">${p.name}</span>
+                    </div>
+                    <button class="btn-icon-danger" onclick="kickParticipant('${p.participantId}')" title="Kick Player">
+                        ✕
+                    </button>
+                </div>
+            `).join("");
+        }
     }
-    participants.forEach((player) => {
-        const tr = document.createElement("tr");
-        const role = status === "FINISHED" ? (player.undercover ? "Undercover" : "Civilian") : player.word ? "Ready" : "Joined";
-        const roleClass = status === "FINISHED" ? (player.undercover ? "badge badge-danger" : "badge badge-success") : "badge badge-neutral";
 
-        tr.innerHTML = `
-            <td>${player.name}</td>
-            <td>${player.word ?? "-"}</td>
-            <td>${player.hasVoted ? "<span class='badge badge-success'>Voted</span>" : "-"}</td>
-            <td><span class="${roleClass}">${role}</span></td>
-        `;
-        tbody.appendChild(tr);
-    });
+    // Render for Table (In-Game / Post-Game)
+    const tbody = document.getElementById("playersTable") as HTMLElement;
+    if (tbody) {
+        tbody.innerHTML = "";
+        if (!participants?.length) {
+            tbody.innerHTML = `<tr><td colspan="4" class="hint">No players joined yet</td></tr>`;
+            return;
+        }
+        participants.forEach((player) => {
+            const tr = document.createElement("tr");
+            const role = status === "FINISHED" ? (player.undercover ? "Undercover" : "Civilian") : player.word ? "Ready" : "Joined";
+            const roleClass = status === "FINISHED" ? (player.undercover ? "badge badge-danger" : "badge badge-success") : "badge badge-neutral";
+
+            tr.innerHTML = `
+                <td>
+                    <div class="row center gap-sm">
+                        ${player.name}
+                        ${player.workImage ? '<span title="Work Uploaded">📷</span>' : ''}
+                        ${player.mood ? `<span class="badge badge-neutral">${player.mood}</span>` : ''}
+                    </div>
+                </td>
+                <td>${revealed ? (player.word ?? "-") : "Hidden"}</td>
+                <td>${player.hasVoted ? "<span class='badge badge-success'>Voted</span>" : "-"}</td>
+                <td><span class="${roleClass}">${role}</span></td>
+            `;
+            tbody.appendChild(tr);
+        });
+    }
 }
+
+
 
 function renderVotes(summary: VoteSummaryItem[]) {
     const tbody = document.getElementById("voteTable") as HTMLElement;
@@ -439,6 +566,42 @@ function updateButtons(view: HostGameView) {
     }
 }
 
+function updateTopicCards(view: HostGameView) {
+    const reveal = view.resultsRevealed;
+
+    const civilianWordEl = document.getElementById("civilianWordTextPlay");
+    const undercoverWordEl = document.getElementById("undercoverWordTextPlay");
+    const civilianWordSetupEl = document.getElementById("civilianWordText");
+    const undercoverWordSetupEl = document.getElementById("undercoverWordText");
+
+    const hiddenText = "Hidden until reveal";
+
+    if (civilianWordEl) civilianWordEl.textContent = reveal ? view.civilianWord : hiddenText;
+    if (undercoverWordEl) undercoverWordEl.textContent = reveal ? view.undercoverWord : hiddenText;
+    if (civilianWordSetupEl) civilianWordSetupEl.textContent = reveal ? view.civilianWord : hiddenText;
+    if (undercoverWordSetupEl) undercoverWordSetupEl.textContent = reveal ? view.undercoverWord : hiddenText;
+
+    const civilianImage = document.getElementById("civilianImagePlay") as HTMLImageElement | null;
+    const undercoverImage = document.getElementById("undercoverImagePlay") as HTMLImageElement | null;
+    const civilianImageSetup = document.getElementById("civilianImage") as HTMLImageElement | null;
+    const undercoverImageSetup = document.getElementById("undercoverImage") as HTMLImageElement | null;
+
+    const setImg = (el: HTMLImageElement | null, src?: string | null) => {
+        if (!el) return;
+        if (reveal && src) {
+            el.src = `/topic_images/${src}`;
+            el.hidden = false;
+        } else {
+            el.hidden = true;
+        }
+    };
+
+    setImg(civilianImage, view.civilianImage);
+    setImg(undercoverImage, view.undercoverImage);
+    setImg(civilianImageSetup, view.civilianImage);
+    setImg(undercoverImageSetup, view.undercoverImage);
+}
+
 async function finishVoting() {
     try {
         const response = await fetch("/api/game/finish", { method: "POST" });
@@ -473,6 +636,65 @@ async function createNewGame() {
     }
 }
 
+interface HostParticipantView {
+    participantId: string;
+    name: string;
+    word?: string | null;
+    undercover: boolean;
+    hasVoted: boolean;
+    workImage?: string | null;
+    mood?: string | null;
+}
+
+function renderGallery(view: HostGameView) {
+    const ids = ["galleryGrid", "galleryGridPlay"];
+    ids.forEach(id => {
+        const gallery = document.getElementById(id);
+        if (!gallery) return;
+
+        gallery.innerHTML = view.participants.map(p => `
+            <div class="vibe-card">
+                <div class="vibe-card-content">
+                    <div class="row between center" style="width: 100%; margin-bottom: 0.5rem;">
+                        <strong>${p.name}</strong>
+                        ${p.mood ? `<span class="badge badge-primary">${p.mood}</span>` : ''}
+                    </div>
+                    <div style="width: 100%; aspect-ratio: 1; background: #eee; border-radius: 8px; overflow: hidden; display: flex; align-items: center; justify-content: center;">
+                        ${p.workImage
+                ? `<img src="${p.workImage}" style="width: 100%; height: 100%; object-fit: cover;">`
+                : `<span class="hint">No Image</span>`}
+                    </div>
+                    <div class="hint" style="margin-top: 0.5rem;">
+                        ${view.status === "FINISHED" ? (p.undercover ? "Undercover" : "Civilian") : ""}
+                    </div>
+                </div>
+            </div>
+        `).join("");
+    });
+}
+
+async function revealResults() {
+    try {
+        await fetch("/api/game/reveal", { method: "POST" });
+        await fetchHostView();
+    } catch (err) {
+        alert("Failed to reveal results");
+    }
+}
+
+async function startVoting() {
+    try {
+        const response = await fetch("/api/game/vote-start", { method: "POST" });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || "Failed to start voting");
+        }
+        await fetchHostView();
+    } catch (err: any) {
+        alert(err.message);
+    }
+}
+
 async function switchTopic() {
     try {
         const response = await fetch("/api/game/switch-topic", { method: "POST" });
@@ -486,6 +708,33 @@ async function switchTopic() {
     }
 }
 
+async function startTimer() {
+    try {
+        const response = await fetch("/api/game/timer", { method: "POST" });
+        if (!response.ok) {
+            const error = await response.json().catch(() => ({}));
+            throw new Error(error.detail || "Failed to start timer");
+        }
+        await fetchHostView();
+    } catch (err: any) {
+        alert(err.message);
+    }
+}
+
+async function kickParticipant(participantId: string) {
+    if (!confirm("Are you sure you want to kick this player?")) return;
+    try {
+        const response = await fetch(`/api/game/participants/${participantId}`, { method: "DELETE" });
+        if (!response.ok) {
+            throw new Error("Failed to kick player");
+        }
+        await fetchHostView();
+    } catch (err: any) {
+        alert(err.message);
+    }
+}
+
+
 function updateCountdown(view: HostGameView) {
     if (view.countdownActive) {
         state.countdownTarget = Date.now() + view.secondsToVoting * 1000;
@@ -498,6 +747,35 @@ function updateCountdown(view: HostGameView) {
         clearCountdownTimer();
         const text = view.status === "IN_PROGRESS" ? "Waiting..." : "--:--";
         setCountdownText(text, false);
+    }
+}
+
+function updateCountdownUI(view: HostGameView) {
+    const countdownTextEl = document.getElementById("countdownText");
+    const startTimerBtn = document.getElementById("btnStartTimer");
+    const startVotingBtn = document.getElementById("btnStartVoting");
+
+    if (view.status === "IN_PROGRESS") {
+        if (startVotingBtn) startVotingBtn.hidden = false;
+
+        if (view.countdownActive) {
+            if (countdownTextEl) {
+                countdownTextEl.style.color = view.secondsToVoting <= 30 ? "var(--danger)" : "var(--primary)";
+            }
+            if (startTimerBtn) startTimerBtn.hidden = true;
+        } else {
+            // Timer not active (or finished if we consider backend logic, but backend keeps it active)
+            // If backend keeps it active, we fall into the block above.
+            // If we are here, it means countdown_ends_at is None.
+            if (countdownTextEl) {
+                countdownTextEl.textContent = "--:--";
+                countdownTextEl.style.color = "var(--text-muted)";
+            }
+            if (startTimerBtn) startTimerBtn.hidden = false;
+        }
+    } else {
+        if (startVotingBtn) startVotingBtn.hidden = true;
+        if (startTimerBtn) startTimerBtn.hidden = true;
     }
 }
 
@@ -516,7 +794,7 @@ function clearCountdownTimer() {
     state.countdownTarget = null;
 }
 
-function setCountdownText(text: string, warning: boolean) {
+function setCountdownText(text: string, warning: boolean = false) {
     const el = document.getElementById("countdownText");
     if (!el) return;
     el.textContent = text;
@@ -617,20 +895,16 @@ function drawVibeWave(canvasId: string, samples: VibeSample[]) {
 }
 
 async function previewPattern(type: 'A' | 'B') {
-    console.log(`Previewing pattern ${type}`);
-
-    // Send to BLE device if connected
-    if (bleCharacteristic) {
-        try {
-            const encoder = new TextEncoder();
-            await bleCharacteristic.writeValue(encoder.encode(type));
-            console.log(`Sent command ${type} to bracelet`);
-        } catch (err) {
-            console.error("Failed to send BLE command:", err);
-            alert("Failed to send command to bracelet. Check connection.");
+    console.log(`Triggering global vibration ${type}`);
+    try {
+        const response = await fetch(`/api/game/vibrate?pattern=${type}`, { method: "POST" });
+        if (!response.ok) {
+            throw new Error("Failed to trigger vibration");
         }
-    } else {
-        alert(`Previewing Pattern ${type} (No device connected)`);
+        // alert(`Triggered Pattern ${type} for all players`);
+    } catch (err: any) {
+        console.error(err);
+        alert("Failed to trigger vibration");
     }
 }
 
