@@ -592,9 +592,7 @@ function updateParticipantCountdown(view: ParticipantView) {
         if (!state.countdownTimer) { // Keep this if a timer is still needed for ticking down
             state.countdownTimer = window.setInterval(() => tickParticipantCountdown(el), 1000);
         }
-        const mins = Math.floor(view.secondsToVoting / 60);
-        const secs = view.secondsToVoting % 60;
-        timerEl.textContent = `${mins}:${secs.toString().padStart(2, "0")}`;
+        timerEl.textContent = formatSeconds(view.secondsToVoting);
         if (view.secondsToVoting <= 30) {
             timerEl.style.color = "var(--danger)";
             timerEl.classList.add("pulse");

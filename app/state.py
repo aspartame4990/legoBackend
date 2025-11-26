@@ -180,7 +180,14 @@ class GameState:
             if not WORD_PAIRS:
                 raise ValueError("No topic images found in public/topic_images/")
 
-            pair = random.choice(WORD_PAIRS)
+            # Avoid picking the exact same pair as current topic if possible
+            current_pair = (game.civilian_word, game.undercover_word)
+            candidates = [
+                p for p in WORD_PAIRS
+                if (p["civilian"], p["undercover"]) != current_pair
+            ]
+            pool = candidates or WORD_PAIRS
+            pair = random.choice(pool)
             game.civilian_word = pair["civilian"]
             game.undercover_word = pair["undercover"]
             game.civilian_image = pair.get("civilianImage")
