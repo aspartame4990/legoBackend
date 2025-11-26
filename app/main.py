@@ -39,7 +39,7 @@ TOPIC_IMAGES_DIR = BASE_DIR / "public" / "topic_images"
 STATIC_DIR.mkdir(parents=True, exist_ok=True)
 TOPIC_IMAGES_DIR.mkdir(parents=True, exist_ok=True)
 
-app = FastAPI(title="Lego Backend (FastAPI)")
+app = FastAPI(title="X-Block Backend (FastAPI)")
 
 # Allow local dev front-ends
 app.add_middleware(
@@ -137,7 +137,7 @@ async def participant_view(token: str):
     return to_participant_view(game, participant)
 
 
-# ---- LegoSense APIs ----
+# ---- X-Block Sense APIs ----
 @app.post("/api/legosense/start", status_code=200)
 async def start_legosense():
     await state.set_lego_sense_started()

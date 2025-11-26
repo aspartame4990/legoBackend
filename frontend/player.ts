@@ -521,8 +521,8 @@ function renderVoteSection(view: ParticipantView) {
                     <button class="vote-card-lg" onclick="castVote('${p.participantId}')">
                         <div class="vote-photo">
                             ${p.workImage
-                ? `<img src="${p.workImage}" alt="${p.name}'s work">`
-                : `<div class="vote-img-placeholder">?</div>`}
+                    ? `<img src="${p.workImage}" alt="${p.name}'s work">`
+                    : `<div class="vote-img-placeholder">?</div>`}
                         </div>
                         <div class="vote-meta">
                             <div class="vote-name">${p.name}</div>
@@ -867,7 +867,12 @@ async function connectToBleDevice() {
 
         console.log("Requesting Bluetooth Device...");
         const device = await nav.bluetooth.requestDevice({
-            filters: [{ name: "LegoSense_Band" }],
+            filters: [
+                { name: "X-Block_Band" },
+                { name: "X-Block-1" },
+                { name: "X-Block-2" },
+                { name: "X-Block-3" }
+            ],
             optionalServices: [BLE_SERVICE_UUID]
         });
 

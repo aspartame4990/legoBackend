@@ -920,7 +920,12 @@ async function connectToBleDevice() {
 
         console.log("Requesting Bluetooth Device...");
         const device = await nav.bluetooth.requestDevice({
-            filters: [{ name: "LegoSense_Band" }],
+            filters: [
+                { name: "X-Block_Band" },
+                { name: "X-Block-1" },
+                { name: "X-Block-2" },
+                { name: "X-Block-3" }
+            ],
             optionalServices: [BLE_SERVICE_UUID]
         });
 
