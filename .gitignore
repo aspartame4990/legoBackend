@@ -3,6 +3,9 @@ node_modules/
 .venv/
 dist/
 build/
+static/
 *.log
+*.pyc
+__pycache__/
 .idea
 .vscode/

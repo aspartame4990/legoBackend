@@ -139,6 +139,8 @@ async def start_legosense():
 @app.get("/api/legosense/host", response_model=LegoSenseHostView)
 async def legosense_host():
     game = state.game
+    submissions = list(state.submissions_by_token.values())
+    groups = list(state.groups.values())
     participants_view = [
         HostParticipantView(
             participantId=p.participant_id,

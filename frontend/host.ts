@@ -1040,7 +1040,6 @@ function renderLegoSense(data: LegoSenseHostView) {
         <div class="row between center" style="margin-bottom: 2rem;">
             <div class="stack">
                 <h1>LegoSense Gallery</h1>
-                <p class="hint">Visualizing player emotions</p>
             </div>
             <div class="row gap-sm">
                 <button class="btn btn-primary" onclick="triggerMoodLights()">
