@@ -399,8 +399,11 @@ function renderParticipantView(view: ParticipantView) {
         // Result Phase
         if (resultPhase) resultPhase.hidden = false;
         renderGameResult(view);
+    }
 
-
+    const self = view.participants.find(p => p.participantId === view.participantId);
+    if (self?.workImage) {
+        updateWorkPreviews(self.workImage);
     }
 
     updateWords(view);
@@ -637,6 +640,17 @@ async function submitVote() {
     }
 }
 
+function updateWorkPreviews(image?: string | null) {
+    if (!image) return;
+    const ids = ["uploadPreview", "uploadPreviewVoting", "uploadPreviewResult"];
+    ids.forEach(id => {
+        const preview = document.getElementById(id);
+        if (preview) {
+            preview.innerHTML = `<img src="${image}" style="width: 100%; border-radius: 8px;">`;
+        }
+    });
+}
+
 async function handleImageUpload(e: Event) {
     const input = e.target as HTMLInputElement;
     if (input.files && input.files[0]) {
@@ -651,14 +665,7 @@ async function handleImageUpload(e: Event) {
                 throw new Error("Image encoding failed");
             }
 
-            // Show preview in all possible containers
-            const ids = ["uploadPreview", "uploadPreviewVoting", "uploadPreviewResult"];
-            ids.forEach(id => {
-                const preview = document.getElementById(id);
-                if (preview) {
-                    preview.innerHTML = `<img src="${base64}" style="width: 100%; border-radius: 8px;">`;
-                }
-            });
+            updateWorkPreviews(base64);
 
             console.debug("Uploading work", { token: state.token, imageLength: base64.length });
 
