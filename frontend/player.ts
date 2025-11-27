@@ -64,6 +64,7 @@ const state: {
     lastVibrationId: string | null;
     selectionMade: boolean;
     lastStatus: GameStatus | null;
+    currentLedZone: "high" | "mid" | "low" | null;
 } = {
     participantId: null,
     token: null,
@@ -71,23 +72,26 @@ const state: {
     countdownTarget: null,
     lastVibrationId: null,
     selectionMade: false,
-    lastStatus: null
+    lastStatus: null,
+    currentLedZone: null
 };
 
 type VibeSample = 0 | 1;
 
 const VIBE_PATTERN_A: VibeSample[] = [
-    1, 1, 1, 1, 0, 0, 0,
-    1, 1, 1, 1, 0, 0, 0,
-    1, 1, 1, 1, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0
+    // 1s ON, 1s OFF, 1s ON, 1s OFF (Total 4s)
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 ];
 
 const VIBE_PATTERN_B: VibeSample[] = [
-    1, 1, 1, 1, 0, 0, 0,
-    1, 1, 1, 1, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
-    1, 1, 1, 1, 1, 1, 1, 0, 0, 0
+    // 100ms ON, 100ms OFF (Repeated to fill 4s)
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0
 ];
 
 // --- Bluetooth Configuration ---
@@ -294,7 +298,7 @@ function activateSession(session: { participantId: string; token: string; name: 
 function startPolling() {
     if (state.pollHandle) clearInterval(state.pollHandle);
     fetchParticipantView();
-    state.pollHandle = window.setInterval(fetchParticipantView, 4000);
+    state.pollHandle = window.setInterval(fetchParticipantView, 1000);
 }
 
 async function fetchParticipantView() {
@@ -417,7 +421,22 @@ function renderParticipantView(view: ParticipantView) {
     if (view.latestVibrationId && view.latestVibrationId !== state.lastVibrationId) {
         state.lastVibrationId = view.latestVibrationId;
         if (view.latestVibrationPattern) {
-            triggerBleVibration(view.latestVibrationPattern);
+            let pattern = view.latestVibrationPattern;
+            if (pattern === "IDENTITY") {
+                // Map IDENTITY to A or B based on role
+                if (view.word === view.civilianWord) {
+                    pattern = "A";
+                } else if (view.word === view.undercoverWord) {
+                    pattern = "B";
+                } else {
+                    // Unknown or not assigned yet
+                    pattern = "";
+                }
+            }
+
+            if (pattern) {
+                triggerBleVibration(pattern);
+            }
         }
     }
 
@@ -427,11 +446,24 @@ function renderParticipantView(view: ParticipantView) {
 async function triggerBleVibration(pattern: string) {
     if (!bleCharacteristic) return;
     try {
-        const encoder = new TextEncoder();
-        await bleCharacteristic.writeValue(encoder.encode(pattern));
+        // Ensure we only send what the ESP32 understands (A, B, 1, 2, etc.)
+        // If pattern is still "IDENTITY" (e.g. word mismatch), don't send it.
+        if (pattern === "IDENTITY") return;
+
+        await sendBleCommand(pattern);
         console.log(`Triggered vibration ${pattern} on bracelet`);
     } catch (err) {
         console.error("Failed to trigger vibration on bracelet:", err);
+    }
+}
+
+async function sendBleCommand(cmd: string) {
+    if (!bleCharacteristic) return;
+    try {
+        const encoder = new TextEncoder();
+        await bleCharacteristic.writeValue(encoder.encode(cmd));
+    } catch (err) {
+        console.error("BLE Write Failed:", err);
     }
 }
 
@@ -479,6 +511,21 @@ function renderGameResult(view: ParticipantView) {
     // Expose submitMood
     (window as any).submitMood = async (mood: string) => {
         if (!mood) return;
+
+        // Send Color to Bracelet
+        const MOOD_RGB: Record<string, string> = {
+            "😊": "250,204,21",  // Yellow
+            "😢": "59,130,246",  // Blue
+            "😡": "239,68,68",   // Red
+            "😎": "34,197,94",   // Green
+            "😍": "236,72,153",  // Pink
+            "😲": "168,85,247"   // Purple
+        };
+
+        if (MOOD_RGB[mood]) {
+            sendBleCommand(`color ${MOOD_RGB[mood]}`);
+        }
+
         try {
             await fetch("/api/game/submit-mood", {
                 method: "POST",
@@ -609,7 +656,25 @@ function tickParticipantCountdown(el: HTMLElement) {
     if (!state.countdownTarget) return;
     const remaining = Math.max(0, Math.round((state.countdownTarget - Date.now()) / 1000));
     el.textContent = formatSeconds(remaining);
-    if (remaining <= 0) clearParticipantCountdown();
+
+    // LED Breathing Logic
+    let zone: "high" | "mid" | "low" | null = null;
+    if (remaining > 20) zone = "high";
+    else if (remaining > 10) zone = "mid";
+    else if (remaining > 0) zone = "low";
+
+    if (zone && zone !== state.currentLedZone) {
+        state.currentLedZone = zone;
+        if (zone === "high") sendBleCommand("breath 0,255,0"); // Green
+        else if (zone === "mid") sendBleCommand("breath 255,255,0"); // Yellow
+        else if (zone === "low") sendBleCommand("breath 255,0,0"); // Red
+    }
+
+    if (remaining <= 0) {
+        clearParticipantCountdown();
+        state.currentLedZone = null;
+        sendBleCommand("off"); // Turn off when done
+    }
 }
 
 function clearParticipantCountdown() {

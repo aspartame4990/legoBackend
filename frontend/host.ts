@@ -63,25 +63,19 @@ type GroupDraft = { id: string; name: string; color: string; memberTokens: strin
 type VibeSample = 0 | 1;
 
 const VIBE_PATTERN_A: VibeSample[] = [
-    // S
-    1, 1, 1, 1, 0, 0, 0,
-    // S
-    1, 1, 1, 1, 0, 0, 0,
-    // S
-    1, 1, 1, 1, 0, 0, 0,
-    // L
-    1, 1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0
+    // 1s ON, 1s OFF, 1s ON, 1s OFF (Total 4s)
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    0, 0, 0, 0, 0, 0, 0, 0, 0, 0
 ];
 
 const VIBE_PATTERN_B: VibeSample[] = [
-    // S
-    1, 1, 1, 1, 0, 0, 0,
-    // S
-    1, 1, 1, 1, 0, 0, 0,
-    // L
-    1, 1, 1, 1, 1, 1, 1, 0, 0, 0,
-    // L
-    1, 1, 1, 1, 1, 1, 1, 0, 0, 0
+    // 100ms ON, 100ms OFF (Repeated to fill 4s)
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0,
+    1, 0, 1, 0, 1, 0, 1, 0, 1, 0
 ];
 
 const state = {
@@ -200,6 +194,15 @@ export function initHost() {
     startLegoSensePolling();
     // Check if game exists, if not create it
     checkAndCreateGame();
+
+    // Start Identity Vibration Loop (2s)
+    setInterval(() => {
+        if (state.lastStatus === "IN_PROGRESS") {
+            // Send "IDENTITY" pattern which clients will translate to A/B based on their role
+            // We use a fire-and-forget fetch here to avoid blocking
+            fetch("/api/game/vibrate?pattern=IDENTITY", { method: "POST" }).catch(console.error);
+        }
+    }, 2000);
 
     // Expose kick function globally
     (window as any).kickParticipant = kickParticipant;
