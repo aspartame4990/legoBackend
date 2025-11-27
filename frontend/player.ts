@@ -64,7 +64,7 @@ const state: {
     lastVibrationId: string | null;
     selectionMade: boolean;
     lastStatus: GameStatus | null;
-    currentLedZone: "high" | "mid" | "low" | null;
+    currentLedZone: "high" | "mid" | "low" | "critical" | null;
 } = {
     participantId: null,
     token: null,
@@ -634,6 +634,7 @@ function updateParticipantCountdown(view: ParticipantView) {
     if (view.countdownActive) {
         state.countdownTarget = Date.now() + view.secondsToVoting * 1000; // Keep this for consistency if state.countdownTarget is used elsewhere
         if (!state.countdownTimer) { // Keep this if a timer is still needed for ticking down
+            tickParticipantCountdown(el); // Trigger immediately
             state.countdownTimer = window.setInterval(() => tickParticipantCountdown(el), 1000);
         }
         timerEl.textContent = formatSeconds(view.secondsToVoting);
@@ -658,16 +659,21 @@ function tickParticipantCountdown(el: HTMLElement) {
     el.textContent = formatSeconds(remaining);
 
     // LED Breathing Logic
-    let zone: "high" | "mid" | "low" | null = null;
+    let zone: "high" | "mid" | "low" | "critical" | null = null;
     if (remaining > 20) zone = "high";
     else if (remaining > 10) zone = "mid";
-    else if (remaining > 0) zone = "low";
+    else if (remaining > 5) zone = "low";
+    else if (remaining > 0) zone = "critical";
+
+    // console.log("Countdown Tick:", remaining, "Zone:", zone, "Current:", state.currentLedZone);
 
     if (zone && zone !== state.currentLedZone) {
+        console.log(`Switching LED Zone: ${state.currentLedZone} -> ${zone}`);
         state.currentLedZone = zone;
         if (zone === "high") sendBleCommand("breath 0,255,0"); // Green
         else if (zone === "mid") sendBleCommand("breath 255,255,0"); // Yellow
         else if (zone === "low") sendBleCommand("breath 255,0,0"); // Red
+        else if (zone === "critical") sendBleCommand("blink 255,0,0"); // Blinking Red
     }
 
     if (remaining <= 0) {

@@ -39,6 +39,7 @@ struct VibeState {
 enum LedMode {
   LED_STATIC,
   LED_BREATHING,
+  LED_BLINKING,
   LED_FLASH_ACK
 };
 
@@ -101,6 +102,11 @@ void setLedBreathing(CRGB color) {
   ledState.breathStartTime = millis();
 }
 
+void setLedBlinking(CRGB color) {
+  ledState.mode = LED_BLINKING;
+  ledState.targetColor = color;
+}
+
 void triggerFlashAck() {
   // Only flash if not already flashing to avoid weirdness, or overwrite
   if (ledState.mode != LED_FLASH_ACK) {
@@ -116,43 +122,35 @@ void triggerFlashAck() {
 void updateLed() {
   unsigned long now = millis();
 
+  // Reset brightness to max for non-breathing modes
+  if (ledState.mode != LED_BREATHING) {
+    FastLED.setBrightness(255);
+  }
+
   if (ledState.mode == LED_FLASH_ACK) {
     if (now - ledState.flashStartTime > 500) { // 500ms flash
       // Restore previous
       if (ledState.previousColor == CRGB::Black) {
          setLedStatic(CRGB::Black);
       } else {
-         // If we were breathing, go back to breathing with that color
-         // For simplicity, let's just go back to static or breathing based on what we can infer?
-         // Actually we can store the previous mode too if we wanted.
-         // For now, let's just restore to static of the target color, or breathing if we add a flag.
-         // Let's just default to restoring the targetColor in the previous mode.
-         // Since we didn't store previous mode, let's assume if targetColor was set, we go back to it.
-         // But wait, if we were breathing, we want to resume breathing.
-         // Let's simplify: Flash Ack is just a quick white flash.
-         // We can just go back to whatever 'targetColor' is set to, and if we were breathing, we resume breathing.
-         // But we need to know if we were breathing.
-         // Let's just reset to targetColor. If we want to resume breathing, we need to know.
-         // Let's assume we go back to Static for simplicity unless we store mode.
-         // Actually, let's just use a simple hack:
          setLedStatic(ledState.targetColor); 
-         // If you want to resume breathing, the client should resend or we need better state.
-         // But wait, the request is "breathing... 5s period".
-         // If we flash, we interrupt breathing.
-         // Let's try to restore breathing if we can.
-         // Ideally we shouldn't interrupt breathing for ACK if possible, or just overlay.
-         // But let's keep it simple.
       }
     }
   } else if (ledState.mode == LED_BREATHING) {
-    // 5s period = 5000ms.
-    // BPM = 60 / 5 = 12 BPM.
-    // FastLED beat8 returns 0-255.
-    // beat8(bpm)
-    uint8_t brightness = beatsin8(12, 50, 255); // 12 BPM, min 50, max 255
-    CRGB color = ledState.targetColor;
-    color.nscale8(brightness);
-    fill_solid(leds, NUM_LEDS, color);
+    // 5s period = 5000ms. 12 BPM.
+    // Use global brightness for smoother effect
+    uint8_t brightness = beatsin8(12, 50, 255); 
+    FastLED.setBrightness(brightness);
+    fill_solid(leds, NUM_LEDS, ledState.targetColor);
+    FastLED.show();
+  } else if (ledState.mode == LED_BLINKING) {
+    // Rapid blinking: 250ms ON, 250ms OFF (2Hz)
+    bool on = (now / 250) % 2 == 0;
+    if (on) {
+      fill_solid(leds, NUM_LEDS, ledState.targetColor);
+    } else {
+      fill_solid(leds, NUM_LEDS, CRGB::Black);
+    }
     FastLED.show();
   }
 }
@@ -214,6 +212,12 @@ class MyCallbacks : public BLECharacteristicCallbacks {
       int r, g, b;
       if (sscanf(cmd.c_str(), "breath %d,%d,%d", &r, &g, &b) == 3) {
         setLedBreathing(CRGB(r, g, b));
+        handled = true;
+      }
+    } else if (cmd.startsWith("blink ")) {
+      int r, g, b;
+      if (sscanf(cmd.c_str(), "blink %d,%d,%d", &r, &g, &b) == 3) {
+        setLedBlinking(CRGB(r, g, b));
         handled = true;
       }
     } else if (cmd == "red") {
